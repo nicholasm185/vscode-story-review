@@ -8,7 +8,8 @@ const out = path.join(here, "..", "test-out");
 fs.mkdirSync(out, { recursive: true });
 
 function findChrome() {
-  const names = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"];
+  // Chrome first: on Ubuntu, `chromium` is often a snap wrapper that can't start in CI.
+  const names = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"];
   for (const n of names) {
     try {
       return execFileSync("which", [n], { encoding: "utf8" }).trim();
@@ -47,13 +48,22 @@ const write = (name, state) => fs.writeFileSync(path.join(out, name),
 write("test.html", {});
 
 const port = 9300 + Math.floor(Math.random() * 600);
+// Ubuntu runners block the sandbox's user namespaces, so CI runs without it.
 const chrome = spawn(chromeBin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
-  `--remote-debugging-port=${port}`, `--user-data-dir=${out}/chrome-profile`, "about:blank"], { stdio: "ignore" });
+  ...(process.env.CI ? ["--no-sandbox"] : []),
+  `--remote-debugging-port=${port}`, `--user-data-dir=${out}/chrome-profile`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+let chromeErr = "";
+chrome.stderr.on("data", (d) => { chromeErr = (chromeErr + d).slice(-4000); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let target;
 for (let i = 0; i < 60 && !target; i++) {
   await sleep(500);
   try { target = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === "page"); } catch {}
+}
+if (!target) {
+  console.error(`${chromeBin} didn't start within 30 seconds. Its last output:\n${chromeErr || "(none)"}`);
+  chrome.kill();
+  process.exit(2);
 }
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener("open", r));
