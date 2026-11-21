@@ -1,0 +1,11 @@
+src/**
+test/**
+test-out/**
+scripts/**
+dist/**
+.github/**
+node_modules/**
+tsconfig.json
+package-lock.json
+.gitignore
+*.vsix

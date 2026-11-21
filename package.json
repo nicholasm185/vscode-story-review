@@ -1,0 +1,129 @@
+{
+  "name": "story-review",
+  "displayName": "Story Review",
+  "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
+  "publisher": "local",
+  "version": "0.3.1",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "storyReview.open",
+        "title": "Open Review",
+        "category": "Story Review",
+        "icon": "$(book)"
+      },
+      {
+        "command": "storyReview.toggleSplit",
+        "title": "Split or Unified Diff",
+        "category": "Story Review",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "storyReview.goto",
+        "title": "Go To",
+        "category": "Story Review"
+      }
+    ],
+    "configuration": {
+      "title": "Story Review",
+      "properties": {
+        "storyReview.reviewsRoot": {
+          "type": "string",
+          "default": "~/.claude/story-reviews",
+          "description": "Folder holding the review folders (<owner>-<repo>/pr-<n>/page.html and meta.json)."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "storyReview",
+          "title": "Story Review",
+          "icon": "media/icon.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "storyReviewNotes",
+          "title": "Review Notes",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "storyReview": [
+        {
+          "id": "storyReview.chapters",
+          "name": "Chapters"
+        },
+        {
+          "id": "storyReview.findings",
+          "name": "Findings"
+        },
+        {
+          "id": "storyReview.files",
+          "name": "Files"
+        }
+      ],
+      "storyReviewNotes": [
+        {
+          "id": "storyReview.notes",
+          "name": "Notes",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "storyReview.chapters",
+        "contents": "No review is open.\n[Open Review](command:storyReview.open)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "storyReview.open",
+          "when": "view == storyReview.chapters",
+          "group": "navigation@1"
+        },
+        {
+          "command": "storyReview.toggleSplit",
+          "when": "view == storyReview.chapters",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "storyReview.goto",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "npm run build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package --allow-missing-repository --skip-license -o dist/",
+    "install-vsix": "node scripts/install.mjs",
+    "release": "npm run package && npm run install-vsix",
+    "test": "node test/bridge-test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.4.0"
+  }
+}

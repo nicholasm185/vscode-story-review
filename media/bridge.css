@@ -1,0 +1,27 @@
+/* VS Code's default webview styles pad the body and recolour code; the page brings its own. */
+body { padding: 0; }
+code { color: inherit; }
+.sr-mod table.diff td.code { cursor: pointer; }
+::highlight(sr-word) { text-decoration: underline; text-decoration-color: var(--accent, currentColor); text-decoration-thickness: 2px; background-color: color-mix(in srgb, var(--accent, #5b8def) 14%, transparent); }
+.sr-tip { position: fixed; z-index: 50; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line, #444);
+  background: var(--surface, #1e1e1e); color: var(--fg, inherit); box-shadow: 0 6px 24px rgb(0 0 0 / .25);
+  font: 13px/1.5 var(--sans, sans-serif); max-height: 50vh; overflow: auto; }
+.sr-tip p { margin: 0 0 6px; }
+.sr-tip p:last-child { margin-bottom: 0; }
+.sr-tip pre { margin: 0 0 6px; padding: 6px 8px; border-radius: 6px; background: var(--sunken, transparent); font: 12px/1.5 var(--mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sr-tip code { font-family: var(--mono, monospace); font-size: 12px; }
+.sr-tip hr { border: 0; border-top: 1px solid var(--line, #444); margin: 8px 0; }
+.sr-tip a { color: var(--accent, inherit); }
+/* An editor beside the panel halves its width; keep the rail pinned there, or the overview scrolls away. */
+@media (min-width: 641px) and (max-width: 980px) {
+  :root .page { grid-template-columns: 200px minmax(0, 1fr); gap: 20px; }
+  :root .rail { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; border: 0; background: none; padding: 0; }
+}
+/* While the side views are open they carry the contents and the notes, so the code gets the panel's width. */
+:root.sr-no-rail .rail { display: none; }
+:root.sr-no-rail .page { grid-template-columns: minmax(0, 1fr); max-width: none; }
+:root.sr-no-rail main { max-width: none; }
+:root.sr-no-notes .step:not(.solo) { display: block; }
+:root.sr-no-notes .step:not(.solo) > .step-notes { display: none; }
+.file-h .path.sr-open { cursor: pointer; }
+.file-h .path.sr-open:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
