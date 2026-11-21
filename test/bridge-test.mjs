@@ -1,17 +1,37 @@
-// Usage: node test/bridge-test.mjs <review dir> <checkout> <chrome>. Checks bridge.js messages on a built page.
+// Usage: node test/bridge-test.mjs [chrome]. Runs bridge.js and notes.js on the fixture review in headless Chrome.
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const [reviewDir, worktree, chromeBin] = process.argv.slice(2);
 const here = path.dirname(new URL(import.meta.url).pathname);
 const out = path.join(here, "..", "test-out");
 fs.mkdirSync(out, { recursive: true });
 
-const FILE = "backend/dsp/domain/pacing/pacer.go", LINE = 208, WORD = "checkEntries";
-const head = JSON.parse(fs.readFileSync(path.join(reviewDir, "meta.json"), "utf8")).head;
-const src = execFileSync("git", ["-C", worktree, "show", `${head}:${FILE}`], { encoding: "utf8" }).split("\n")[LINE - 1];
-const wantCol = src.indexOf(WORD);
+function findChrome() {
+  const names = ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"];
+  for (const n of names) {
+    try {
+      return execFileSync("which", [n], { encoding: "utf8" }).trim();
+    } catch {}
+  }
+  const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  return fs.existsSync(mac) ? mac : null;
+}
+const chromeBin = process.argv[2] || process.env.CHROME || findChrome();
+if (!chromeBin) {
+  console.error("No Chrome or Chromium found. Pass its path, or set CHROME.");
+  process.exit(2);
+}
+
+// The fixture review (test/fixture) and the parts of it the checks aim at.
+const reviewDir = path.join(here, "fixture", "review");
+const FILE = "shop/cart.go", WORD = "bestDiscount", LINE_TEXT = "off := bestDiscount(";
+const STEP = "total-2", STEP_CHAPTER = "#ch2", STEP_CHAPTER_TITLE = "Chapter 2";
+const READ_CHAPTER = "#ch1", LAST_CHAPTER = "#ch3", FINDING = "#f2";
+const SYNC_FILE = "shop/discount.go", UNLISTED_FILE = "README.md";
+const headLines = fs.readFileSync(path.join(here, "fixture", "head", FILE), "utf8").split("\n");
+const LINE = headLines.findIndex((l) => l.includes(LINE_TEXT)) + 1;
+const wantCol = headLines[LINE - 1].indexOf(WORD);
 
 const nonce = "testnonce";
 const page = fs.readFileSync(path.join(reviewDir, "page.html"), "utf8")
@@ -94,10 +114,10 @@ for (const split of [false, true]) {
   check(`${view}: hover names the word's position`, h && h.path === FILE && h.line === LINE && h.col === wantCol,
     JSON.stringify(h) + ` want col ${wantCol}`);
   if (h) {
-    await js(`window.postMessage({ type: "hover", id: ${h.id}, html: '<p><code>func (p *Pacer) checkEntries()</code></p><img src="x" onerror="window.__pwned=1"><a href="javascript:alert(1)">x</a>' }, "*")`);
+    await js(`window.postMessage({ type: "hover", id: ${h.id}, html: '<p><code>func bestDiscount(sum int, codes []string) int</code></p><img src="x" onerror="window.__pwned=1"><a href="javascript:alert(1)">x</a>' }, "*")`);
     await sleep(300);
     const tip = await js(`(() => { const t = document.querySelector(".sr-tip"); return { shown: !t.hidden, html: t.innerHTML, pwned: !!window.__pwned }; })()`);
-    check(`${view}: hover card shows`, tip.shown && tip.html.includes("checkEntries"));
+    check(`${view}: hover card shows`, tip.shown && tip.html.includes(WORD));
     check(`${view}: hover card is sanitized`, !tip.pwned && !/onerror|javascript:/.test(tip.html), tip.html.slice(0, 120));
     check(`${view}: word is highlighted`, await js(`CSS.highlights.has("sr-word")`));
   }
@@ -127,7 +147,7 @@ await send("Emulation.setDeviceMetricsOverride", { width: 820, height: 1000, dev
 await send("Page.navigate", { url: "file://" + path.join(out, "test-narrow.html") });
 await sleep(2500);
 check("progress comes back after reopening", await js(`!!document.querySelector('.viewed-toggle input[data-part="${part}"]')?.checked`));
-await js(`document.querySelector("#ch5").scrollIntoView({ behavior: "instant" })`);
+await js(`document.querySelector("${LAST_CHAPTER}").scrollIntoView({ behavior: "instant" })`);
 await sleep(300);
 // The page's own "contents hidden" layout, then a wider panel: the page must still use the full width.
 await js(`document.documentElement.classList.add("rail-off")`);
@@ -149,8 +169,9 @@ check("no script errors or blocked page scripts", other.length === 0, other.join
 // Side views: outline, layout switch, notes for the code in view, highlight and read marks driven from outside.
 const outlineMsg = await lastMsg("outline");
 const o = outlineMsg && outlineMsg.outline;
-check("outline lists chapters, findings and files", o && o.chapters.length === 9 && o.findings.length === 2 && o.files.length === 17,
-  o ? `${o.chapters.length} chapters, ${o.findings.length} findings, ${o.files.length} files` : "none");
+const counts = await js(`({ chapters: document.querySelectorAll("#toc > li").length, findings: document.querySelectorAll(".finding[id]").length, files: document.querySelectorAll(".ftree li.tfile").length })`);
+check("outline lists every chapter, finding and file", o && o.chapters.length === counts.chapters && o.findings.length === counts.findings && o.files.length === counts.files && counts.files > 1,
+  o ? `${o.chapters.length}/${counts.chapters} chapters, ${o.findings.length}/${counts.findings} findings, ${o.files.length}/${counts.files} files` : "none");
 check("findings carry their location", o && o.findings.every((f) => /:\d+/.test(f.loc)), o && JSON.stringify(o.findings.map((f) => f.loc)));
 check("the viewed file shows in the outline", o && o.files.some((f) => f.viewed || f.partial));
 await js(`window.postMessage({ type: "layout", rail: true, notes: true }, "*")`);
@@ -158,10 +179,10 @@ await sleep(400);
 const lay = await js(`(() => ({ rail: getComputedStyle(document.querySelector(".rail")).display, notes: [...document.querySelectorAll(".step:not(.solo) > .step-notes")].every(n => getComputedStyle(n).display === "none"),
   main: Math.round(document.querySelector("main").getBoundingClientRect().width), sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth }))()`);
 check("with side views open the page drops its rail and notes", lay.rail === "none" && lay.notes && !lay.sideways, JSON.stringify(lay));
-await js(`window.__msgs.length = 0; document.querySelector('tr[data-ws="decide-3"]').scrollIntoView({ block: "start", behavior: "instant" }); window.scrollBy(0, -200)`);
+await js(`window.__msgs.length = 0; document.querySelector('tr[data-ws="${STEP}"]').scrollIntoView({ block: "start", behavior: "instant" }); window.scrollBy(0, -200)`);
 await sleep(500);
 const notes = await lastMsg("notes");
-check("notes for the code in view are sent", notes && /wnote/.test(notes.html) && /Chapter 3/.test(notes.title) && !/aligned|style="top/.test(notes.html),
+check("notes for the code in view are sent", notes && /wnote/.test(notes.html) && notes.title.includes(STEP_CHAPTER_TITLE) && !/aligned|style="top/.test(notes.html),
   notes ? `${notes.title} | ${notes.html.length} chars | files ${notes.files}` : "none");
 const shot = async (name) => {
   if (!process.env.SHOTS) return;
@@ -170,11 +191,11 @@ const shot = async (name) => {
 };
 await shot("page-side-views.png");
 const cur = await lastMsg("current");
-check("the current chapter is reported", cur && cur.href === "#ch3", JSON.stringify(cur));
-await js(`window.postMessage({ type: "light", ws: "decide-3", on: true }, "*")`);
+check("the current chapter is reported", cur && cur.href === STEP_CHAPTER, JSON.stringify(cur));
+await js(`window.postMessage({ type: "light", ws: "${STEP}", on: true }, "*")`);
 await sleep(150);
-check("a note hovered in the side view lights its lines", await js(`document.querySelectorAll('tr.ws-on[data-ws="decide-3"], td.ws-on[data-ws="decide-3"]').length > 0`));
-await js(`window.__msgs.length = 0; window.postMessage({ type: "setRead", href: "#ch2", on: true }, "*")`);
+check("a note hovered in the side view lights its lines", await js(`document.querySelectorAll('tr.ws-on[data-ws="${STEP}"], td.ws-on[data-ws="${STEP}"]').length > 0`));
+await js(`window.__msgs.length = 0; window.postMessage({ type: "setRead", href: "${READ_CHAPTER}", on: true }, "*")`);
 await sleep(400);
 const after = await lastMsg("outline");
 await js(`window.__msgs.length = 0; window.postMessage({ type: "keys", on: false }, "*")`);
@@ -183,10 +204,10 @@ const keysMsg = await lastMsg("outline");
 check("the shortcuts toggle turns single-key shortcuts off", await js(`document.querySelector(".keys-toggle input").checked === false`) && keysMsg && keysMsg.outline.keysOn === false);
 await js(`window.postMessage({ type: "keys", on: true }, "*")`);
 await sleep(200);
-check("a chapter ticked in the side view is marked read", await js(`document.querySelector('.seen-toggle input[data-ch="ch2"]').checked`) && after && after.outline.chapters.find((c) => c.href === "#ch2").read === true);
-await js(`window.postMessage({ type: "goto", href: "#f2" }, "*")`);
+check("a chapter ticked in the side view is marked read", await js(`document.querySelector('.seen-toggle input[data-ch="${READ_CHAPTER.slice(1)}"]').checked`) && after && after.outline.chapters.find((c) => c.href === READ_CHAPTER).read === true);
+await js(`window.postMessage({ type: "goto", href: "${FINDING}" }, "*")`);
 await sleep(1500);
-check("a finding clicked in the side view scrolls the page to it", await js(`(() => { const r = document.getElementById("f2").getBoundingClientRect(); return r.top >= -5 && r.top < innerHeight; })()`));
+check("a finding clicked in the side view scrolls the page to it", await js(`(() => { const r = document.getElementById("${FINDING.slice(1)}").getBoundingClientRect(); return r.top >= -5 && r.top < innerHeight; })()`));
 
 // A file header's name opens the file at its first added line.
 const hdr = await js(`(() => { const b = document.querySelector('.file[data-file="${FILE}"]'); const el = b.querySelector(".file-h .path"); el.scrollIntoView({ block: "center", behavior: "instant" });
@@ -198,7 +219,7 @@ const opened = await lastMsg("open");
 check("clicking a file header's name opens the file", hdr.link && opened && opened.path === FILE && opened.line === hdr.want, JSON.stringify({ opened, want: hdr.want }));
 
 // GitHub's Viewed marks: a sync updates the page without echoing back, and the reader's own tick is sent.
-const syncPath = "backend/dsp/domain/pacing/entry_caps.go";
+const syncPath = SYNC_FILE;
 await js(`window.__msgs.length = 0; window.postMessage({ type: "syncViewed", viewed: ["${syncPath}"] }, "*")`);
 await sleep(300);
 const synced = await js(`(() => ({ viewed: document.querySelector('.ftree li.tfile[data-path="${syncPath}"]').classList.contains("is-viewed"),
@@ -208,7 +229,7 @@ await js(`window.__msgs.length = 0; document.querySelector('.ftree li.tfile[data
 await sleep(200);
 const ticked = await lastMsg("viewedChange");
 check("unticking a file sends it to GitHub", ticked && ticked.path === syncPath && ticked.viewed === false, JSON.stringify(ticked));
-const unlisted = "backend/dsp/domain/pacing/pacer.go";
+const unlisted = UNLISTED_FILE;
 await js(`window.__msgs.length = 0; document.querySelector('.ftree li.tfile[data-path="${unlisted}"] input').click()`);
 await sleep(100);
 await js(`window.postMessage({ type: "syncViewed", viewed: [], listed: ["${syncPath}"] }, "*")`);
@@ -220,7 +241,6 @@ await send("Input.dispatchKeyEvent", { type: "keyDown", key: "v", text: "v" });
 await send("Input.dispatchKeyEvent", { type: "keyUp", key: "v" });
 await sleep(300);
 const vkey = await lastMsg("viewedChange");
-if (process.env.DEBUG) console.log("toast:", await js(`(document.querySelector(".toast") || {}).textContent`), "active:", await js(`document.activeElement && document.activeElement.tagName`));
 check("the v key's tick is sent to GitHub too", vkey && vkey.path, JSON.stringify(vkey));
 
 // The Notes view itself, fed one notes message.
@@ -235,9 +255,9 @@ await sleep(800);
 await js(`window.postMessage(${JSON.stringify({ ...notes, type: "notes" })}, "*")`);
 await sleep(300);
 const nv = await js(`(() => ({ notes: document.querySelectorAll(".wnote").length, title: document.getElementById("title").textContent, sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth }))()`);
-check("the Notes view shows the step's notes", nv.notes > 0 && /Chapter 3/.test(nv.title) && !nv.sideways, JSON.stringify(nv));
+check("the Notes view shows the step's notes", nv.notes > 0 && nv.title.includes(STEP_CHAPTER_TITLE) && !nv.sideways, JSON.stringify(nv));
 await shot("notes-view.png");
-const li = await js(`(() => { const n = document.querySelector('.wnote[data-ws="decide-3"]'); if (!n) return null; const b = n.getBoundingClientRect(); return { x: b.left + 40, y: b.top + 8 }; })()`);
+const li = await js(`(() => { const n = document.querySelector('.wnote[data-ws="${STEP}"]'); if (!n) return null; const b = n.getBoundingClientRect(); return { x: b.left + 40, y: b.top + 8 }; })()`);
 if (li) {
   await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: li.x, y: li.y });
   await sleep(150);
@@ -246,9 +266,9 @@ if (li) {
 const fileLink = await js(`(() => { const a = document.querySelector(".sr-files a"); if (!a) return null; const r = a.getBoundingClientRect(); return { x: r.left + 5, y: r.top + r.height / 2, text: a.textContent }; })()`);
 if (fileLink) await click(fileLink.x, fileLink.y);
 const sentOpen = await js(`JSON.stringify(window.__msgs.filter(m => m.type === "open"))`);
-check("a file name in the Notes view opens the file", fileLink && /"path":"backend\/dsp\/domain\/pacing\/pacer.go","line":\d+/.test(sentOpen), `${fileLink && fileLink.text} ${sentOpen}`);
+check("a file name in the Notes view opens the file", fileLink && sentOpen.includes(`"path":"${FILE}","line":`), `${fileLink && fileLink.text} ${sentOpen}`);
 const sent = await js(`JSON.stringify(window.__msgs)`);
-check("hovering and clicking a note asks the page to light and show its lines", /"light","ws":"decide-3","on":true/.test(sent) && /"step","ws":"decide-3"/.test(sent), sent.slice(0, 160));
+check("hovering and clicking a note asks the page to light and show its lines", sent.includes(`"light","ws":"${STEP}","on":true`) && sent.includes(`"step","ws":"${STEP}"`), sent.slice(0, 160));
 
 console.log(results.join("\n"));
 chrome.kill();

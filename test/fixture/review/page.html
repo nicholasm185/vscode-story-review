@@ -1,0 +1,1233 @@
+<title>PR #42 Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sticky rail (chapters, findings, file checklist) on the left, one reading column of narrative and diffs. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --sunken: #eef1f4; --fg: #1a1f26; --muted: #5b6571; --line: #dce1e7;
+  --accent: #2f58c9; --accent-soft: #e7edfb;
+  --add-bg: #e7f5eb; --add-word: #b6e3c2; --add-fg: #1f6b37;
+  --del-bg: #fbecee; --del-word: #f3c3c8; --del-fg: #9b2832;
+  --kw: #7b3fa0; --st: #0c6b6b; --cm: #5f6a76;
+  --high: #b3261e; --high-bg: #fde7e5;
+  --med: #a45300; --med-bg: #fff0dc; --low: #1f6f78; --low-bg: #e2f2f3; --nit: #626b76; --nit-bg: #eef0f2;
+  --ok: #1d7448; --ok-bg: #e3f3ea;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --measure: 62ch;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1217; --surface: #151a21; --sunken: #11161c; --fg: #e3e8ee; --muted: #97a2ae; --line: #29313b;
+  --accent: #8aa8ff; --accent-soft: #1b2540;
+  --add-bg: #11281a; --add-word: #1f4d30; --add-fg: #82d39d;
+  --del-bg: #2c1418; --del-word: #5a252c; --del-fg: #f09aa3;
+  --kw: #cf9ff5; --st: #74d2c8; --cm: #8b96a2;
+  --high: #ff9b93; --high-bg: #3a1714;
+  --med: #ffb565; --med-bg: #33240f; --low: #79ccd4; --low-bg: #13292c; --nit: #a9b2bc; --nit-bg: #1d2229;
+  --ok: #7fd3a4; --ok-bg: #12291d;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1217; --surface: #151a21; --sunken: #11161c; --fg: #e3e8ee; --muted: #97a2ae; --line: #29313b;
+  --accent: #8aa8ff; --accent-soft: #1b2540;
+  --add-bg: #11281a; --add-word: #1f4d30; --add-fg: #82d39d;
+  --del-bg: #2c1418; --del-word: #5a252c; --del-fg: #f09aa3;
+  --kw: #cf9ff5; --st: #74d2c8; --cm: #8b96a2;
+  --high: #ff9b93; --high-bg: #3a1714;
+  --med: #ffb565; --med-bg: #33240f; --low: #79ccd4; --low-bg: #13292c; --nit: #a9b2bc; --nit-bg: #1d2229;
+  --ok: #7fd3a4; --ok-bg: #12291d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 52px; }
+p, li { text-wrap: pretty; }
+::selection { background: var(--accent-soft); color: var(--fg); }
+.vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.skip { position: absolute; left: 12px; top: -48px; z-index: 30; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 12px; }
+.skip:focus { top: 12px; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+p code, li code, td code, h3 code, h4 code { background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.page { max-width: 1260px; margin: 0 auto; padding-block: 28px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 40px; }
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; max-height: calc(100vh - 40px); overflow-y: auto; font-size: 13.5px; }
+.rail h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.rail ol { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 2px; }
+.rail li a { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: baseline; padding: 6px 8px; border-radius: 6px; color: var(--fg); text-decoration: none; }
+.rail li a:hover { background: var(--sunken); }
+.rail li a .n { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+.rail li.seen a .t { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.rail li.seen a .n::after { content: " ✓"; color: var(--ok); }
+.rail .fl a { grid-template-columns: auto 1fr; }
+.rail .prev a { display: block; padding: 6px 8px; border-radius: 6px; text-decoration: none; }
+.rail .prev a:hover { background: var(--sunken); }
+.rail .none { margin: 0 0 22px; padding: 0 8px; color: var(--muted); }
+#toc li.current > a { background: var(--sunken); }
+#toc li.current > a .t { font-weight: 600; }
+.dot { display: inline-block; min-width: 18px; text-align: center; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 0 5px; }
+
+main { min-width: 0; max-width: 900px; }
+.eyebrow { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 500; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+h1 { font-size: 28px; line-height: 1.25; margin: 8px 0 6px; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em; }
+.prtitle { font-family: var(--mono); font-size: 13px; color: var(--muted); margin: 0 0 18px; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+.chip { font-size: 12.5px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; display: inline-flex; gap: 6px; align-items: center; max-width: 100%; }
+.chip .mono { overflow-wrap: anywhere; }
+.chip.gh { color: var(--accent); text-decoration: none; font-weight: 500; }
+.chip.gh:hover { border-color: var(--accent); }
+.chip.ok { border-color: transparent; background: var(--ok-bg); color: var(--ok); font-weight: 500; }
+.a { color: var(--add-fg); font-weight: 600; } .d { color: var(--del-fg); font-weight: 600; }
+
+.stack { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px; font-size: 13px; }
+.stack .node { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 9px; font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; }
+.stack a.node:hover { border-color: var(--accent); color: var(--accent); }
+.stack .node.here { border-color: var(--accent); color: var(--fg); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }
+.stack .arrow { color: var(--muted); }
+.stack .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-right: 4px; }
+
+.verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin-bottom: 18px; }
+.verdict .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.verdict h2 { margin: 0 0 8px; font-size: 22px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.verdict .vlabel { font-size: 14px; font-weight: 500; color: var(--muted); }
+.verdict[data-decision="approve"] .decision { color: var(--ok); }
+.verdict[data-decision="changes"] .decision { color: var(--med); }
+.verdict[data-decision="block"] .decision { color: var(--high); }
+.verdict p { margin: 0 0 10px; max-width: var(--measure); }
+.nofind { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 14px; color: var(--muted); }
+.ftable { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+.ftable td { border-top: 1px solid var(--line); padding: 9px 8px; vertical-align: top; }
+.ftable td:first-child { width: 1%; white-space: nowrap; padding-left: 0; }
+.ftable td.loc { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.ftable a { color: var(--fg); text-decoration: none; font-weight: 500; }
+.ftable a:hover { color: var(--accent); }
+
+.sev { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 2px 7px; display: inline-block; }
+.s-high { color: var(--high); background: var(--high-bg); }
+.s-med { color: var(--med); background: var(--med-bg); } .s-low { color: var(--low); background: var(--low-bg); } .s-nit { color: var(--nit); background: var(--nit-bg); }
+
+.checked { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 22px; margin-bottom: 40px; }
+.checked h2 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+.checked ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 7px; font-size: 14px; max-width: 78ch; }
+.checked li { position: relative; padding-left: 26px; }
+.checked li::before { content: "✓"; color: var(--ok); font-weight: 700; position: absolute; left: 0; top: 0; width: 18px; }
+.checked li.no { background: var(--med-bg); border-radius: 6px; padding: 4px 10px 4px 34px; }
+.checked li.no::before { content: "?"; color: var(--med); left: 12px; top: 4px; }
+
+.chapter { --chh: 34px; border-top: 1px solid var(--line); padding-top: 22px; margin-top: 36px; scroll-margin-top: 16px; }
+/* The chapter bar sticks above the file headers, so "Mark as read" stays in reach. page.js adds the title and sets .stuck. */
+.ch-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; height: var(--chh);
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 4; background: var(--bg); }
+.ch-head.stuck { box-shadow: 0 1px 0 var(--line); }
+.ch-num { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: none; }
+.ch-t { display: none; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.ch-head.stuck .ch-t { display: block; }
+.chapter h2 { font-size: 21px; margin: 2px 0 6px; font-weight: 600; text-wrap: balance; }
+.lede { font-size: 16px; color: var(--muted); margin: 0 0 14px; max-width: var(--measure); }
+.chapter > p, .chapter > .prose p { max-width: var(--measure); }
+.files-in { font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 14px; }
+.seen-toggle { flex: none; margin-left: auto; font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+.seen-toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+.note { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 16px 0; font-size: 14px; background: var(--surface); display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.note p { margin: 0; }
+.note p + p { margin-top: 6px; }
+.tag { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+.tag.ok { color: var(--ok); background: var(--ok-bg); } .tag.info { color: var(--muted); background: var(--sunken); }
+
+/* overflow: clip rounds the corners without becoming a scroll container, which would stop the header sticking. */
+.file { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); margin: 16px 0; overflow: hidden; overflow: clip; scroll-margin-top: 16px; }
+.file-h { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 8px 12px; background: var(--sunken); border-bottom: 1px solid var(--line); font-size: 12.5px;
+  position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--chh, 0px)); z-index: 3; }
+.file-h .path { font-family: var(--mono); font-weight: 500; overflow-wrap: anywhere; min-width: 0; flex: 1 1 260px; }
+.fstat { font-family: var(--mono); font-size: 12px; }
+.ftag { font-size: 11px; line-height: 1.45; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; background: var(--surface); }
+.ptag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+a.pj, .rail .ftree a.pj { display: inline-block; min-width: 24px; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface);
+  color: var(--muted); font-family: var(--mono); font-size: 11.5px; line-height: 20px; text-align: center; text-decoration: none; }
+a.pj.is-viewed, .rail .ftree a.pj.is-viewed { color: var(--ok); background: var(--ok-bg); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+a.pj.is-here { color: var(--fg); border-color: currentColor; font-weight: 600; }
+a.pj.is-here.is-viewed { color: var(--ok); }
+a.pj:hover, .rail .ftree a.pj:hover { color: var(--accent); border-color: var(--accent); }
+.copy-path { font: inherit; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; background: var(--surface); cursor: pointer; }
+.copy-path:hover { color: var(--accent); border-color: var(--accent); }
+.file-h .gh { font-size: 12px; text-decoration: none; }
+.file-h .gh:hover { text-decoration: underline; }
+table.diff td.ln:nth-child(2):not(:empty), table.diff td.ln.nl:not(:empty) { cursor: copy; }
+table.diff td.ln:nth-child(2):not(:empty):hover, table.diff td.ln.nl:not(:empty):hover { color: var(--accent); opacity: 1; text-decoration: underline; }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); transform: translate(-50%, 10px); max-width: min(90vw, 680px);
+  padding: 8px 14px; border-radius: 8px; background: var(--fg); color: var(--bg); font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere;
+  opacity: 0; pointer-events: none; z-index: 20; user-select: text; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+@media (prefers-reduced-motion: no-preference) { .toast { transition: opacity .15s, transform .15s; } }
+.chip.warn { border-color: transparent; background: var(--high-bg); color: var(--high); font-weight: 500; }
+.viewed-toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; background: var(--surface); cursor: pointer; user-select: none; }
+.viewed-toggle input { margin: 0; accent-color: var(--ok); }
+.file.is-viewed > .file-h { background: var(--ok-bg); }
+.file.is-viewed .viewed-toggle { color: var(--ok); border-color: currentColor; }
+.hunk-h { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 5px 12px; background: var(--accent-soft); border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.file-h + .hunk-h { border-top: 0; }
+.scroll { overflow-x: auto; }
+table.diff { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+table.diff td { padding: 0; vertical-align: top; }
+table.diff .ln { width: 1%; min-width: 42px; text-align: right; padding: 0 8px; color: var(--muted); user-select: none; font-variant-numeric: tabular-nums; }
+table.diff .sg { width: 16px; text-align: center; user-select: none; color: var(--muted); }
+/* Leading whitespace renders as padding, so a wrapped line hangs 2ch under its own indent, not at column 0. */
+table.diff .code { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 12px; tab-size: 4; padding-left: calc(var(--ind, 0) * 1ch + 2ch); text-indent: -2ch; }
+/* Tabs keep their tab stops at font-size 0, which doubled the indent, and a wrap point after the indent left the first line blank. */
+table.diff .code .lead { font-size: 0; tab-size: 0; white-space: pre; }
+table.diff.md .code { font-family: var(--sans); font-size: 13.5px; line-height: 1.55; padding-block: 1px; }
+tr.add td { background: var(--add-bg); } tr.add .sg { color: var(--add-fg); }
+tr.del td { background: var(--del-bg); } tr.del .sg { color: var(--del-fg); }
+tr.add .wd { background: var(--add-word); border-radius: 2px; }
+tr.del .wd { background: var(--del-word); border-radius: 2px; }
+.kw { color: var(--kw); } .st { color: var(--st); } .cm { color: var(--cm); font-style: italic; }
+tr.pin > td { background: var(--sunken); padding: 12px 12px 14px !important; font-family: var(--sans); font-size: 14px; line-height: 1.55; white-space: normal; border-block: 1px solid var(--line); }
+/* Walkthrough: a numbered marker on each step's first line, and the step's note in the side column. */
+td.code.wm { position: relative; padding-right: 36px; }
+.wmark { position: absolute; right: 8px; top: 1px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; display: grid; place-items: center;
+  font: 600 11px/1 var(--mono); text-indent: 0; color: var(--accent); background: var(--accent-soft); text-decoration: none; user-select: none; }
+.wmark:hover, .wmark.ws-on { background: var(--accent); color: var(--surface); }
+tr.ws-on > td { background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)); }
+tr.ws-on > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* Split rows light per half; the selector must outrank table.sp td.add, whose background shorthand clears the tint. */
+table.diff.sp td.ws-on { background-image: linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent), color-mix(in srgb, var(--accent) 9%, transparent)); }
+table.diff.sp td.ws-on.wsb { box-shadow: inset 3px 0 0 var(--accent); }
+.wcol { margin-top: 14px; }
+.wnotes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.wnote { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 4px 8px 5px 4px; border-radius: 6px; font-size: 13.5px; line-height: 1.5; scroll-margin-top: 90px; }
+.wnote.ws-on { background: var(--accent-soft); }
+.wnum { font: 600 11px/1 var(--mono); width: 20px; height: 20px; margin-top: 1px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center;
+  color: var(--accent); background: var(--accent-soft); cursor: pointer; }
+.wnote.ws-on .wnum, .wnum:hover { background: var(--accent); color: var(--surface); }
+.wbody { min-width: 0; }
+.wbody > :last-child { margin-bottom: 0; }
+.wbody p, .wbody ul { margin: 0 0 4px; }
+.wbody ul { padding-left: 18px; }
+.wbody table.trace { border-collapse: collapse; margin: 2px 0 4px; font-size: 12px; }
+.wbody table.trace th { text-align: left; font-weight: 600; color: var(--muted); padding: 1px 10px 2px 0; border-bottom: 1px solid var(--line); }
+.wbody table.trace td { font-family: var(--mono); padding: 2px 10px 2px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.wbody table.trace tr.pick td { font-weight: 600; color: var(--accent); }
+.wcol.aligned { position: relative; }
+.wcol.aligned .wnotes { display: block; }
+.wcol.aligned .wnote { position: absolute; left: 0; right: 0; }
+:root.walk-off .wcol, :root.walk-off .wmark { display: none; }
+:root.walk-off td.code.wm { padding-right: 12px; }
+
+details.more { margin: 16px 0; }
+details.more > summary { cursor: pointer; font-size: 14px; color: var(--accent); }
+details.more[open] > summary { margin-bottom: 4px; }
+
+.files-box { margin: 0 0 22px; }
+.files-box > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 6px; }
+.files-box > summary::-webkit-details-marker { display: none; }
+.files-box > summary::before { content: "▸"; font-size: 10px; }
+.files-box[open] > summary::before { content: "▾"; }
+.fcount { margin-left: auto; font-family: var(--mono); font-size: 12px; letter-spacing: 0; text-transform: none; font-weight: 500; color: var(--fg); }
+.fbar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 0 0 6px; }
+.fbar > span { display: block; height: 100%; width: 0; background: var(--ok); }
+.fcover { font-size: 12px; color: var(--muted); margin: 0 0 8px; padding: 0 2px; line-height: 1.45; }
+.fcover.warn { color: var(--high); }
+.ftree, .ftree ul { list-style: none; margin: 0; padding: 0; }
+.ftree ul { margin-left: 6px; padding-left: 7px; border-left: 1px solid var(--line); }
+.ftree summary { list-style: none; cursor: pointer; display: flex; gap: 5px; align-items: baseline; padding: 3px 4px; border-radius: 6px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.ftree summary::-webkit-details-marker { display: none; }
+.ftree summary::before { content: "▾"; font-size: 10px; width: 9px; flex: none; }
+.ftree details:not([open]) > summary::before { content: "▸"; }
+.ftree summary:hover { background: var(--sunken); }
+.ftree .dname { overflow-wrap: anywhere; min-width: 0; }
+.ftree .dname::after { content: "/"; }
+.ftree .dprog { margin-left: auto; flex: none; font-size: 11.5px; }
+.ftree .tdir.is-done > details > summary { color: var(--ok); }
+.ftree .tdir.is-done > details > summary .dprog::after { content: " ✓"; }
+.ftree li.tfile { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; align-items: start; padding: 3px 4px; border-radius: 6px; }
+.ftree li.tfile:hover { background: var(--sunken); }
+.ftree input { margin: 3px 0 0; accent-color: var(--ok); }
+.rail .ftree a { display: block; padding: 0; color: var(--fg); text-decoration: none; min-width: 0; }
+.rail .ftree a:hover { background: none; color: var(--accent); }
+.ftree .fname { display: block; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.ftree .fmeta { display: flex; flex-wrap: wrap; gap: 2px 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.ftree li.is-partial .fparts { color: var(--med); }
+.ftree .fjump { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.ftree .fjump .fparts { margin-left: 4px; }
+.ftree .fmeta .warn { color: var(--high); }
+.ftree li.is-viewed .fname { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+
+.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; max-width: 820px; scroll-margin-top: 60px; box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
+.finding .gh { font-size: 12.5px; text-decoration: none; }
+.finding .gh:hover { text-decoration: underline; }
+.f-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.f-head .cat { font-size: 12px; color: var(--muted); }
+.f-head .spacer { flex: 1; }
+.finding h3, .finding h4 { margin: 6px 0 8px; font-size: 15.5px; font-weight: 600; line-height: 1.4; text-wrap: balance; }
+.finding p { margin: 0 0 8px; max-width: var(--measure); }
+.f-row { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 4px 14px; margin-top: 10px; }
+.f-row .lbl { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding-top: 3px; }
+.f-row p:last-child { margin-bottom: 0; }
+pre.sugg { margin: 8px 0 0; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; overflow-x: auto; white-space: pre; }
+button.copy { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+button.copy:hover { border-color: var(--accent); color: var(--accent); }
+button.copy.done { color: var(--ok); border-color: currentColor; }
+textarea.fallback { width: 100%; min-height: 160px; margin-top: 10px; font-family: var(--mono); font-size: 12px; background: var(--sunken); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+
+.routes { display: grid; gap: 8px; margin: 18px 0; }
+.route { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .8fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; font-size: 13.5px; }
+.route > div { padding: 10px 12px; min-width: 0; }
+.route > div + div { border-left: 1px solid var(--line); }
+.route .keys code { display: inline-block; margin: 0 4px 4px 0; font-size: 11.5px; }
+.route .path { font-weight: 600; }
+.route .path small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.route.new { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.route-h { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .8fr) minmax(0, 1.2fr) minmax(0, 1fr); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 0 13px; }
+.route-h span { padding: 0 12px 0 0; }
+
+.flow { list-style: none; counter-reset: step; margin: 18px 0; padding: 0; display: grid; gap: 8px; }
+.flow li { counter-increment: step; position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px 10px 56px; font-size: 14px; }
+.flow li::before { content: counter(step); font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; position: absolute; left: 14px; top: 10px; }
+.flow li b { display: block; font-weight: 600; margin-bottom: 2px; }
+.flow li code { font-size: 11.5px; }
+.flow .keys { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 6px; }
+.flow .k { font-family: var(--mono); font-size: 11.5px; border-radius: 4px; padding: 1px 6px; border: 1px solid var(--line); background: var(--sunken); }
+.flow .k.sub { border-color: var(--del-word); background: var(--del-bg); color: var(--del-fg); }
+.flow .k.ret { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.flow .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.flow li.later { border-style: dashed; }
+pre.formula { margin: 14px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.7; overflow-x: auto; }
+.combos-wrap { overflow-x: auto; }
+table.combos { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 14px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table.combos th, table.combos td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+table.combos th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-top: 0; background: var(--sunken); }
+
+.steps { display: grid; gap: 30px; margin-top: 10px; }
+.notes-ch { display: none; }
+.notes-in > :first-child { margin-top: 0; }
+.notes-in p { margin: 0 0 12px; max-width: var(--measure); }
+.step-code > :first-child { margin-top: 0; }
+
+@media (min-width: 1360px) {
+  .page { max-width: 1840px; grid-template-columns: 232px minmax(0, 1fr); gap: 32px; }
+  main { max-width: none; }
+  main > header, .explain, .verdict, .checked { max-width: 1000px; }
+  .step { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 380px); gap: 24px; }
+  .step-code { grid-column: 1; grid-row: 1; min-width: 0; }
+  .step-notes { grid-column: 2; grid-row: 1; min-width: 0; }
+  .notes-in { position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--chh, 0px) + 12px); max-height: calc(100vh - var(--chh, 0px) - 28px); overflow-y: auto;
+    padding: 2px 4px 4px 16px; border-left: 2px solid var(--accent-soft); font-size: 14px; line-height: 1.55; }
+  .step.has-walk .notes-in { position: static; max-height: none; overflow: visible; }
+  .step.has-walk .wcol { padding-left: 10px; }
+  .step.solo { display: block; }
+  .step.solo .notes-in { position: static; max-height: none; border-left: 0; padding: 0; font-size: inherit; }
+  .step-notes .note { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .step-notes .note .tag { justify-self: start; }
+  .step-notes .route, .step-notes .route-h { grid-template-columns: minmax(0, 1fr); }
+  .step-notes .route-h { display: none; }
+  .step-notes .route > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .step-notes .route > div { padding: 7px 10px; }
+  .step-notes .flow li { padding: 8px 10px 8px 42px; font-size: 13.5px; }
+  .step-notes .flow li::before { left: 10px; top: 8px; }
+  .step-notes pre.formula { font-size: 12px; }
+  .step-notes table.combos { font-size: 12.5px; }
+}
+
+@media (max-width: 980px) {
+  .page { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .rail { position: static; max-height: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 14px 14px 2px; }
+}
+@media (max-width: 640px) {
+  h1 { font-size: 23px; }
+  .f-row { grid-template-columns: minmax(0, 1fr); }
+  .route, .route-h { grid-template-columns: minmax(0, 1fr); }
+  .route-h { display: none; }
+  .route > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .ftable td.loc { display: none; }
+  table.diff .ln { min-width: 30px; padding: 0 4px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+/* Explainer: free-form section before the verdict, for diagrams and walkthroughs. */
+.explain { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin-bottom: 18px; scroll-margin-top: 16px; }
+.explain h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; text-wrap: balance; }
+.explain h3 { font-size: 15px; font-weight: 600; margin: 26px 0 6px; }
+.explain p, .explain ul { max-width: var(--measure); margin: 0 0 10px; }
+.explain .lede { margin-bottom: 16px; }
+.explain figure { margin: 18px 0 22px; }
+.explain figcaption { font-size: 13px; color: var(--muted); max-width: var(--measure); margin-top: 8px; }
+.dg-wrap { overflow-x: auto; }
+/* Flow diagrams (the @flow placeholder): boxes wrap their text, so a label can't run out of its box. */
+.flow-fig .fl { display: flex; align-items: flex-start; }
+.fl-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.fl-box { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 11px 9px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.fl-box b { display: block; font-weight: 600; }
+.fl-box span { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.fl-box code { font-size: 0.92em; }
+.fl-box.fl-hot { background: var(--accent-soft); border-color: var(--accent); } .fl-box.fl-hot b { color: var(--accent); }
+.fl-box.fl-blocked { background: var(--del-bg); border-color: var(--del-fg); }
+.fl-box.fl-open { background: var(--add-bg); border-color: var(--add-fg); }
+.fl-box.fl-chip { background: var(--sunken); }
+.fl-box.fl-faded { opacity: .55; }
+.fl-arrow { flex: 0 0 auto; width: clamp(48px, 9%, 108px); position: relative; padding: 26px 6px 0; text-align: center; font-size: 11.5px; line-height: 1.3; color: var(--muted); overflow-wrap: anywhere; }
+.fl-arrow::before { content: ""; position: absolute; left: 4px; right: 9px; top: 19px; border-top: 1.5px solid var(--muted); }
+.fl-arrow::after { content: ""; position: absolute; right: 3px; top: 15px; border-style: solid; border-width: 4.75px 0 4.75px 7px; border-color: transparent transparent transparent var(--muted); }
+.fl-gap { flex: 0 0 18px; }
+.fl-branch { display: flex; flex-direction: column; }
+.fl-down { position: relative; min-height: 30px; padding: 6px 0 8px 24px; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
+.fl-down::before { content: ""; position: absolute; left: 14px; top: 3px; bottom: 8px; border-left: 1.5px solid var(--muted); }
+.fl-down::after { content: ""; position: absolute; left: 10.25px; bottom: 2px; border-style: solid; border-width: 7px 4.75px 0 4.75px; border-color: var(--muted) transparent transparent transparent; }
+.fl-arrow.hot, .fl-down.hot { color: var(--accent); }
+.fl-arrow.hot::before { border-top: 1.5px dashed var(--accent); } .fl-arrow.hot::after { border-left-color: var(--accent); }
+.fl-down.hot::before { border-left: 1.5px dashed var(--accent); } .fl-down.hot::after { border-top-color: var(--accent); }
+.fl.down { flex-direction: column; align-items: stretch; max-width: 520px; }
+.fl.down .fl-col { flex: none; }
+.fl.down .fl-branch { margin-left: 28px; padding-left: 10px; border-left: 2px solid var(--line); }
+.fl.down .fl-arrow, .fl.down .fl-gap { width: auto; flex: none; text-align: left; padding: 6px 0 10px 24px; min-height: 30px; }
+.fl.down .fl-arrow::before { left: 14px; right: auto; top: 3px; bottom: 9px; border-top: 0; border-left: 1.5px solid var(--muted); }
+.fl.down .fl-arrow::after { left: 10.25px; right: auto; top: auto; bottom: 3px; border-width: 7px 4.75px 0 4.75px; border-color: var(--muted) transparent transparent transparent; }
+.fl.down .fl-arrow.hot::before { border-left: 1.5px dashed var(--accent); } .fl.down .fl-arrow.hot::after { border-top-color: var(--accent); }
+@media (max-width: 640px) {
+  .flow-fig .fl { flex-direction: column; align-items: stretch; }
+  .fl-col { flex: none; }
+  .fl-branch { margin-left: 28px; padding-left: 10px; border-left: 2px solid var(--line); }
+  .fl-arrow, .fl-gap { width: auto; flex: none; text-align: left; padding: 6px 0 10px 24px; min-height: 30px; }
+  .fl-arrow::before { left: 14px; right: auto; top: 3px; bottom: 9px; border-top: 0; border-left: 1.5px solid var(--muted); }
+  .fl-arrow::after { left: 10.25px; right: auto; top: auto; bottom: 3px; border-width: 7px 4.75px 0 4.75px; border-color: var(--muted) transparent transparent transparent; }
+  .fl-arrow.hot::before { border-top: 0; border-left: 1.5px dashed var(--accent); } .fl-arrow.hot::after { border-left-color: transparent; border-top-color: var(--accent); }
+}
+.dg { display: block; width: 100%; min-width: 640px; height: auto; color: var(--fg); }
+.dg text { fill: currentColor; font-family: var(--sans); font-size: 12px; }
+.dg .t { font-weight: 600; font-size: 13px; }
+.dg .m { font-family: var(--mono); font-size: 11.5px; }
+.dg .s { font-size: 11px; }
+.dg .mu { fill: var(--muted); }
+.dg .box { fill: var(--surface); stroke: var(--line); }
+.dg .chip { fill: var(--sunken); stroke: var(--line); }
+.dg .hot { fill: var(--accent-soft); stroke: var(--accent); }
+.dg .hot-t { fill: var(--accent); }
+.dg .blocked { fill: var(--del-bg); stroke: var(--del-fg); }
+.dg .open { fill: var(--add-bg); stroke: var(--add-fg); }
+.dg .edge { fill: none; stroke: var(--muted); stroke-width: 1.25; }
+.dg .edge.hot { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.dg .ah { fill: var(--muted); }
+.dg .ah.hot { fill: var(--accent); }
+.dg .faded { opacity: .45; }
+
+/* Keys hint in the rail, and the closing card after the last chapter. */
+kbd { font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--fg); }
+.rail .shortcuts { font-size: 12.5px; color: var(--muted); margin: 0 0 22px; }
+.rail .shortcuts p { margin: 0 0 6px; line-height: 1.9; }
+.keys-toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+.keys-toggle input { accent-color: var(--accent); margin: 0; }
+.closing { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin-top: 48px; max-width: 1000px; scroll-margin-top: 16px; }
+.closing h2 { margin: 0 0 12px; font-size: 20px; font-weight: 600; }
+.cl-row { border-top: 1px solid var(--line); padding: 12px 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 4px 16px; }
+.cl-row h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.cl-row > p { margin: 0; }
+.cl-row > ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; grid-column: 2; }
+.cl-files a { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.cl-parts { color: var(--med); font-size: 12.5px; }
+.cl-state { color: var(--muted); font-size: 12.5px; }
+.cl-finds li.is-done .cl-state { color: var(--ok); }
+.cl-top { border-top: 1px solid var(--line); margin: 0; padding-top: 12px; font-size: 13px; }
+@media (max-width: 640px) { .cl-row { grid-template-columns: minmax(0, 1fr); } .cl-row > ul { grid-column: 1; } }
+
+/* View controls, built by page.js at the top of the rail. With the rail hidden they stay as a narrow column, so it can come back. */
+.viewbar, .notes-back { display: none; }
+.viewbar button { font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+.viewbar svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.25; }
+.viewbar button[aria-pressed="true"] { background: var(--surface); color: var(--fg); border-color: var(--muted); }
+.viewbar button[aria-pressed="true"] .pane { fill: currentColor; fill-opacity: .35; }
+.viewbar button:not([aria-disabled="true"]):hover { color: var(--accent); border-color: var(--accent); }
+.viewbar button[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.viewbar button:focus-visible { outline-offset: -2px; }
+.notes-back { font: inherit; font-size: 12.5px; color: var(--muted); border: 1px dashed var(--muted); border-radius: 6px; background: none; padding: 2px 10px; margin: 0 0 10px; cursor: pointer; }
+.notes-back span { color: var(--accent); margin-left: 6px; }
+.notes-back:hover { border-color: var(--accent); }
+@media (min-width: 981px) {
+  .viewbar { display: flex; flex-wrap: wrap; gap: 4px; position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: 14px; }
+  :root.rail-off .page { grid-template-columns: 28px minmax(0, 1fr); gap: 16px; }
+  :root.rail-off .rail { overflow: visible; }
+  :root.rail-off .rail > :not(.viewbar):not(#toc) { display: none; }
+  :root.rail-off #toc { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+  :root.rail-off #toc a { display: block; position: relative; width: 28px; height: 26px; padding: 0; line-height: 26px; text-align: center; }
+  :root.rail-off #toc .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root.rail-off #toc .n { color: var(--fg); }
+  :root.rail-off #toc li:not([data-ch]) .n::before { content: "\2022"; color: var(--muted); }
+  :root.rail-off #toc li.seen a { background: var(--ok-bg); }
+  :root.rail-off #toc li.seen .n { color: var(--ok); }
+  :root.rail-off #toc li.seen .n::after { content: none; }
+  :root.rail-off #toc li.current > a { box-shadow: inset 0 0 0 1px var(--muted); }
+  :root.rail-off #toc li.current .n { font-weight: 700; }
+  :root.rail-off #toc .dot { position: absolute; top: 2px; right: 2px; min-width: 0; width: 7px; height: 7px; padding: 0; border-radius: 50%; font-size: 0; background: currentColor; }
+  :root.rail-off .viewbar { flex-direction: column; padding: 0; }
+  :root.rail-off .viewbar button { width: 28px; height: 28px; padding: 0; justify-content: center; }
+  :root.rail-off .vb-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  :root.rail-off main { max-width: none; }
+  :root.rail-off main > header, :root.rail-off .explain, :root.rail-off .verdict, :root.rail-off .checked { max-width: 1000px; }
+}
+@media (min-width: 981px) and (max-width: 1359px) { :root.rail-off .step-notes { max-width: 900px; } }
+@media (min-width: 1360px) {
+  :root.notes-off .step:not(.solo) { display: block; }
+  :root.notes-off .step:not(.solo) .notes-in { display: none; }
+  :root.notes-off .step:not(.solo) .wcol { display: none; }
+  :root.notes-off .notes-back { display: inline-block; }
+}
+
+/* Split diff: page.js builds a second table beside each unified one. Fixed layout keeps the two code columns equal and makes long lines wrap. */
+table.sp { table-layout: fixed; }
+table.sp col.c-ln { width: calc(var(--lnw, 3) * 1ch + 16px); }
+table.sp col.c-sg { width: 16px; }
+/* The cap keeps deeply nested code from spending its whole column on indent. */
+table.sp .code { padding-left: min(calc(var(--ind, 0) * 1ch + 2ch), 22%); }
+table.sp td.add { background: var(--add-bg); } table.sp td.sg.add { color: var(--add-fg); }
+table.sp td.del { background: var(--del-bg); } table.sp td.sg.del { color: var(--del-fg); }
+table.sp td.add .wd { background: var(--add-word); border-radius: 2px; }
+table.sp td.del .wd { background: var(--del-word); border-radius: 2px; }
+table.sp td.nil { background: var(--sunken); }
+table.sp td.rs { border-left: 1px solid var(--line); }
+table.diff .code[data-ind="4"] { --ind: 4; }
+table.diff .code[data-ind="8"] { --ind: 8; }
+table.diff .code[data-ind="12"] { --ind: 12; }
+</style>
+
+<a class="skip" href="#main">Skip to the review</a>
+<div class="page">
+<nav class="rail" aria-label="Review contents">
+  <h2>Read in this order</h2>
+  <ol id="toc"><li data-ch="ch1"><a href="#ch1"><span class="n">1</span><span class="t">The codes: what each one takes off</span><span></span></a></li><li data-ch="ch2"><a href="#ch2"><span class="n">2</span><span class="t">The cart: Total takes the best code</span><span class="dot s-low">1</span></a></li><li data-ch="ch3"><a href="#ch3"><span class="n">3</span><span class="t">Tests: what each one proves</span><span class="dot s-nit">1</span></a></li><li><a href="#end"><span class="n"></span><span class="t">Where this review stands</span><span></span></a></li></ol>
+  <h2>Findings</h2>
+  <ol class="fl"><li><a href="#f1"><span class="sev s-low">Low</span><span>A code's percent is never checked</span></a></li><li><a href="#f2"><span class="sev s-nit">Nit</span><span>No spec covers a cart under a code's minimum</span></a></li></ol>
+  <details class="files-box" open><summary>Files<span class="fcount">0 / 4 viewed</span></summary><div class="fbar"><span></span></div><p class="fcover">All 4 hunks of the 4 changed files are on this page. 1 are in collapsed sections; a file's link opens them.</p><ul class="ftree"><li class="tdir"><details open><summary><span class="dname">shop</span><span class="dprog">0/3</span></summary><ul><li class="tfile" data-path="shop/cart.go"><input type="checkbox" data-path="shop/cart.go" aria-label="Viewed shop/cart.go"><div><a href="#file-2-1" title="shop/cart.go"><span class="fname">cart.go</span></a><span class="fmeta"><span><b class="a">+12</b> <b class="d">−2</b></span><span>ch 2</span></span></div></li><li class="tfile" data-path="shop/cart_test.go"><input type="checkbox" data-path="shop/cart_test.go" aria-label="Viewed shop/cart_test.go"><div><a href="#file-3-1" title="shop/cart_test.go"><span class="fname">cart_test.go</span></a><span class="fmeta"><span><b class="a">+17</b> <b class="d">−0</b></span><span>ch 3</span></span></div></li><li class="tfile" data-path="shop/discount.go"><input type="checkbox" data-path="shop/discount.go" aria-label="Viewed shop/discount.go"><div><a href="#file-1-1" title="shop/discount.go"><span class="fname">discount.go</span></a><span class="fmeta"><span><b class="a">+39</b> <b class="d">−0</b></span><span>ch 1</span></span></div></li></ul></details></li><li class="tfile" data-path="README.md"><input type="checkbox" data-path="README.md" aria-label="Viewed README.md"><div><a href="#file-4-1" title="README.md"><span class="fname">README.md</span></a><span class="fmeta"><span><b class="a">+1</b> <b class="d">−1</b></span><span>ch 3</span><span>collapsed</span></span></div></li></ul></details>
+<div class="shortcuts"><h2>Keys</h2><p><kbd>j</kbd> <kbd>k</kbd> next or previous file<br><kbd>n</kbd> <kbd>p</kbd> next or previous finding<br><kbd>v</kbd> Viewed for the file at the top<br><kbd>c</kbd> hide or show the contents<br><kbd>t</kbd> hide or show the notes<br><kbd>w</kbd> hide or show the walkthrough<br><kbd>s</kbd> split or unified diff</p><label class="keys-toggle"><input type="checkbox" checked> Single-key shortcuts</label></div>
+</nav>
+
+<main id="main">
+<header>
+  <div class="eyebrow"><span>example/shop</span><span>Pull request #42</span><span>Test fixture</span><span>Reviewed 1 Jan 2026</span></div>
+  <h1>The cart takes the best discount code off its total</h1>
+  <p class="prtitle">feat(cart): apply discount codes</p>
+  <div class="stack" aria-label="Stack">
+    <span class="lbl">Stack</span>
+    <span class="node">main</span><span class="arrow">←</span>
+    <span class="node here">#42 this PR</span>
+  </div>
+  <div class="meta"><a class="chip gh" href="https://github.com/example/shop/pull/42">#42 on GitHub</a><span class="chip">By Example Author <span class="mono">example-author</span></span><span class="chip"><span class="mono">main @ dca92e26d</span> ← <span class="mono">feat/discount-codes @ f93bcce24</span></span><span class="chip"><b class="a">+69</b><b class="d">−3</b> in 4 files</span><span class="chip">Code <b class="a">+51</b><b class="d">−2</b> · Tests <b class="a">+17</b><b class="d">−0</b> · Docs <b class="a">+1</b><b class="d">−1</b></span><span class="chip ">No CI checks on f93bcce24</span><span class="chip ">No reviews yet</span></div>
+</header>
+
+<section class="verdict" data-decision="changes" aria-labelledby="verdict-h">
+  <h2 id="verdict-h"><span class="vlabel">Verdict</span> <span class="decision">Approve after 1 change</span></h2>
+  <p>This is the made-up review the extension's tests run against. <code>Total</code> now takes discount codes and subtracts the largest one a cart qualifies for. Nothing a reader would bill is wrong, but a code's percent is never checked.</p>
+  <table class="ftable"><tbody><tr><td><span class="sev s-low">Low</span></td><td><a href="#f1">A code's percent is never checked, so a typo there is hidden by the clamp</a></td><td class="loc" title="shop/cart.go">cart.go:14</td></tr><tr><td><span class="sev s-nit">Nit</span></td><td><a href="#f2">No spec covers a cart under a code's minimum</a></td><td class="loc" title="shop/cart_test.go">cart_test.go:12</td></tr></tbody></table>
+</section>
+
+<section class="checked" aria-labelledby="checked-h">
+  <h2 id="checked-h">Checked and fine</h2>
+  <ul>
+    <li class="no"><span>Nothing here was run. This review is a test fixture.</span></li>
+    <li><span>Unknown codes. <code>lookup</code> reports them as missing, and <code>bestDiscount</code> skips them.</span></li>
+  </ul>
+</section>
+
+<section class="chapter" id="ch1">
+  <div class="ch-head"><span class="ch-num">Chapter 1 of 3</span><label class="seen-toggle"><input type="checkbox" id="seen-ch1" data-ch="ch1"> Mark as read</label></div>
+  <h2>The codes: what each one takes off</h2>
+  <p class="lede">A code is a percent off, and only once the cart reaches the code's minimum.</p>
+  <div class="files-in"><span>shop/discount.go</span></div>
+  <div class="steps" data-gen="steps"><div class="step has-walk" data-gen="step"><aside class="step-notes" data-gen="notes"><div class="notes-in" data-gen="notes-in"><div class="notes-ch" data-gen="label">Chapter 1 · The codes: what each one takes off</div><p><b>The example.</b> A cart of two lamps at 60.00 each, with the codes <code>save10</code> and <code>BIG25</code>.</p></div><!--/gen--><div class="wcol" data-gen="wcol"><ol class="wnotes" data-walk="codes" data-gen="walk"><li class="wnote" id="codes-1" data-ws="codes-1" data-lines="6-10"><button class="wnum" type="button" aria-label="Step 1: show lines 6 to 10">1</button><div class="wbody"><p>A code, the percent it takes off, and the smallest cart it works on.</p></div></li><li class="wnote" id="codes-2" data-ws="codes-2" data-lines="18-19"><button class="wnum" type="button" aria-label="Step 2: show lines 18 to 19">2</button><div class="wbody"><p>The largest amount any code takes off. It starts at nothing.</p></div></li><li class="wnote" id="codes-3" data-ws="codes-3" data-lines="20-29"><button class="wnum" type="button" aria-label="Step 3: show lines 20 to 29">3</button><div class="wbody"><p>Each known code the cart qualifies for is tried, and the biggest wins.</p>
+<table class="trace"><thead><tr><th>Code</th><th>Off</th><th>Best</th></tr></thead>
+<tbody><tr><td>save10</td><td>12.00</td><td>12.00</td></tr><tr class="pick"><td>BIG25</td><td>30.00</td><td>30.00</td></tr></tbody></table></div></li></ol><!--/gen--></div><!--/gen--></aside><!--/gen--><div class="step-code" data-gen="code"><div class="file" id="file-1-1" data-path="shop/discount.go" data-file="shop/discount.go"><div class="file-h"><span class="path">shop/discount.go</span><span class="fstat"><b class="a">+39</b> <b class="d">−0</b></span><button class="copy-path" type="button" data-copy="shop/discount.go" aria-label="Copy path shop/discount.go" title="Copy the path. Click a line number to copy path:line.">Copy path</button><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-fee3f0cfd5331bf79d38ad2c70ec976f3f0eb883bc281fc9a5df607c93bc5f63" aria-label="Open shop/discount.go on GitHub">GitHub</a><label class="viewed-toggle"><input type="checkbox" data-path="shop/discount.go" data-part="file-1-1" aria-label="Viewed shop/discount.go"> Viewed</label></div><div class="hunk-h">@@ −0 +1 @@</div><div class="scroll"><table class="diff go"><tbody><tr class="add"><td class="ln"></td><td class="ln">1</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">package</span> shop</td></tr><tr class="add"><td class="ln"></td><td class="ln">2</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">3</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">import</span> <span class="st">&quot;strings&quot;</span></td></tr><tr class="add"><td class="ln"></td><td class="ln">4</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">5</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="cm">// Discount is what one code takes off a cart.</span></td></tr><tr class="add" data-ws="codes-1"><td class="ln"></td><td class="ln">6</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm"><span class="kw">type</span> Discount <span class="kw">struct</span> {<a class="wmark" href="#codes-1" data-ws="codes-1" aria-label="Step 1 note">1</a></td></tr><tr class="add" data-ws="codes-1"><td class="ln"></td><td class="ln">7</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>Code    string</td></tr><tr class="add" data-ws="codes-1"><td class="ln"></td><td class="ln">8</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>Percent int</td></tr><tr class="add" data-ws="codes-1"><td class="ln"></td><td class="ln">9</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>MinCart int</td></tr><tr class="add" data-ws="codes-1"><td class="ln"></td><td class="ln">10</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr><tr class="add"><td class="ln"></td><td class="ln">11</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">12</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">var</span> discounts = []Discount{</td></tr><tr class="add"><td class="ln"></td><td class="ln">13</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>{Code: <span class="st">&quot;SAVE10&quot;</span>, Percent: 10, MinCart: 0},</td></tr><tr class="add"><td class="ln"></td><td class="ln">14</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>{Code: <span class="st">&quot;BIG25&quot;</span>, Percent: 25, MinCart: 10000},</td></tr><tr class="add"><td class="ln"></td><td class="ln">15</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr><tr class="add"><td class="ln"></td><td class="ln">16</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">17</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="cm">// bestDiscount is the largest amount any of the codes takes off sum.</span></td></tr><tr class="add" data-ws="codes-2"><td class="ln"></td><td class="ln">18</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm"><span class="kw">func</span> bestDiscount(sum int, codes []string) int {<a class="wmark" href="#codes-2" data-ws="codes-2" aria-label="Step 2 note">2</a></td></tr><tr class="add" data-ws="codes-2"><td class="ln"></td><td class="ln">19</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>best := 0</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">20</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm" data-ind="4"><span class="lead">	</span><span class="kw">for</span> _, code := <span class="kw">range</span> codes {<a class="wmark" href="#codes-3" data-ws="codes-3" aria-label="Step 3 note">3</a></td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">21</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>d, ok := lookup(code)</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">22</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span><span class="kw">if</span> !ok || sum &lt; d.MinCart {</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">23</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="12"><span class="lead">			</span>continue</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">24</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>}</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">25</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span><span class="kw">if</span> off := sum * d.Percent / 100; off &gt; best {</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">26</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="12"><span class="lead">			</span>best = off</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">27</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>}</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">28</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>}</td></tr><tr class="add" data-ws="codes-3"><td class="ln"></td><td class="ln">29</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">return</span> best</td></tr><tr class="add"><td class="ln"></td><td class="ln">30</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr><tr class="add"><td class="ln"></td><td class="ln">31</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">32</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">func</span> lookup(code string) (Discount, bool) {</td></tr><tr class="add"><td class="ln"></td><td class="ln">33</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">for</span> _, d := <span class="kw">range</span> discounts {</td></tr><tr class="add"><td class="ln"></td><td class="ln">34</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span><span class="kw">if</span> strings.EqualFold(d.Code, code) {</td></tr><tr class="add"><td class="ln"></td><td class="ln">35</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="12"><span class="lead">			</span><span class="kw">return</span> d, <span class="kw">true</span></td></tr><tr class="add"><td class="ln"></td><td class="ln">36</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>}</td></tr><tr class="add"><td class="ln"></td><td class="ln">37</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>}</td></tr><tr class="add"><td class="ln"></td><td class="ln">38</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">return</span> Discount{}, <span class="kw">false</span></td></tr><tr class="add"><td class="ln"></td><td class="ln">39</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr></tbody></table></div></div></div><!--/gen--></div><!--/gen--></div><!--/gen-->
+</section>
+
+<section class="chapter" id="ch2">
+  <div class="ch-head"><span class="ch-num">Chapter 2 of 3</span><label class="seen-toggle"><input type="checkbox" id="seen-ch2" data-ch="ch2"> Mark as read</label></div>
+  <h2>The cart: Total takes the best code</h2>
+  <p class="lede"><code>Total</code> gains the codes and subtracts the best one from the subtotal.</p>
+  <div class="files-in"><span>shop/cart.go</span></div>
+  <div class="steps" data-gen="steps"><div class="step has-walk" data-gen="step"><aside class="step-notes" data-gen="notes"><div class="notes-in" data-gen="notes-in"><div class="notes-ch" data-gen="label">Chapter 2 · The cart: Total takes the best code</div></div><!--/gen--><div class="wcol" data-gen="wcol"><ol class="wnotes" data-walk="total" data-gen="walk"><li class="wnote" id="total-1" data-ws="total-1" data-lines="11-12"><button class="wnum" type="button" aria-label="Step 1: show lines 11 to 12">1</button><div class="wbody"><p>The codes are a new argument, so every caller changes.</p></div></li><li class="wnote" id="total-2" data-ws="total-2" data-lines="13"><button class="wnum" type="button" aria-label="Step 2: show lines 13">2</button><div class="wbody"><p>The best code for this cart. The lamps: 30.00.</p></div></li><li class="wnote" id="total-3" data-ws="total-3" data-lines="14-17"><button class="wnum" type="button" aria-label="Step 3: show lines 14 to 17">3</button><div class="wbody"><p>A discount never takes the total below zero.</p></div></li></ol><!--/gen--></div><!--/gen--></aside><!--/gen--><div class="step-code" data-gen="code"><div class="file" id="file-2-1" data-path="shop/cart.go" data-file="shop/cart.go"><div class="file-h"><span class="path">shop/cart.go</span><span class="fstat"><b class="a">+12</b> <b class="d">−2</b></span><button class="copy-path" type="button" data-copy="shop/cart.go" aria-label="Copy path shop/cart.go" title="Copy the path. Click a line number to copy path:line.">Copy path</button><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-afc6867d096563e5b26e6139b5cd1411d3c755ca199b9c75a635f517528cacef" aria-label="Open shop/cart.go on GitHub">GitHub</a><label class="viewed-toggle"><input type="checkbox" data-path="shop/cart.go" data-part="file-2-1" aria-label="Viewed shop/cart.go"> Viewed</label></div><div class="hunk-h">@@ −7 +7 @@ <span class="hctx">type Item struct {</span></div><div class="scroll"><table class="diff go"><tbody><tr class="ctx"><td class="ln">7</td><td class="ln">7</td><td class="sg"></td><td class="code" data-ind="4"><span class="lead">	</span>Qty   int</td></tr><tr class="ctx"><td class="ln">8</td><td class="ln">8</td><td class="sg"></td><td class="code">}</td></tr><tr class="ctx"><td class="ln">9</td><td class="ln">9</td><td class="sg"></td><td class="code"></td></tr><tr class="del"><td class="ln">10</td><td class="ln"></td><td class="sg"><span aria-hidden="true">−</span><span class="vh">Removed</span></td><td class="code"><span class="cm">// Total adds up the cart.</span></td></tr><tr class="del"><td class="ln">11</td><td class="ln"></td><td class="sg"><span aria-hidden="true">−</span><span class="vh">Removed</span></td><td class="code"><span class="kw">func</span> Total(items []Item) int {</td></tr><tr class="add"><td class="ln"></td><td class="ln">10</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="cm">// Total adds up the cart and takes off the best discount code.</span></td></tr><tr class="add" data-ws="total-1"><td class="ln"></td><td class="ln">11</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm"><span class="kw">func</span> Total(items []Item, codes []string) int {<a class="wmark" href="#total-1" data-ws="total-1" aria-label="Step 1 note">1</a></td></tr><tr class="add" data-ws="total-1"><td class="ln"></td><td class="ln">12</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>sum := subtotal(items)</td></tr><tr class="add" data-ws="total-2"><td class="ln"></td><td class="ln">13</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm" data-ind="4"><span class="lead">	</span>off := bestDiscount(sum, codes)<a class="wmark" href="#total-2" data-ws="total-2" aria-label="Step 2 note">2</a></td></tr><tr class="add" data-ws="total-3"><td class="ln"></td><td class="ln">14</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code wm" data-ind="4"><span class="lead">	</span><span class="kw">if</span> off &gt; sum {<a class="wmark" href="#total-3" data-ws="total-3" aria-label="Step 3 note">3</a></td></tr><tr class="pin"><td colspan="4"><div class="finding s-low-b" id="f1" data-short="A code's percent is never checked"><div class="f-head"><span class="sev s-low">Low</span><span class="cat">Validation</span><span class="spacer"></span><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-afc6867d096563e5b26e6139b5cd1411d3c755ca199b9c75a635f517528cacefR14">Open line on GitHub</a><button class="copy" type="button">Copy as PR comment</button></div><h3>A code's percent is never checked, so a typo there is hidden by the clamp</h3>
+<p>A <code>Percent</code> of 150 takes more than the cart, and the clamp at <code>cart.go:14</code> turns it into a free cart without a word.</p><div class="f-row"><span class="lbl">Suggested fix</span><div><p>Check each code's percent is between 1 and 100 when the list is built.</p></div></div><script type="text/markdown" class="md">**[Validation]** A code's percent is never checked, so a typo there is hidden by the clamp
+
+A `Percent` of 150 takes more than the cart, and the clamp at `cart.go:14` turns it into a free cart without a word.
+
+**Suggested fix:** Check each code's percent is between 1 and 100 when the list is built.</script></div></td></tr><tr class="add" data-ws="total-3"><td class="ln"></td><td class="ln">15</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>off = sum</td></tr><tr class="add" data-ws="total-3"><td class="ln"></td><td class="ln">16</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>}</td></tr><tr class="add" data-ws="total-3"><td class="ln"></td><td class="ln">17</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">return</span> sum - off</td></tr><tr class="add"><td class="ln"></td><td class="ln">18</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr><tr class="add"><td class="ln"></td><td class="ln">19</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">20</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="cm">// subtotal is the cart before any discount.</span></td></tr><tr class="add"><td class="ln"></td><td class="ln">21</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">func</span> subtotal(items []Item) int {</td></tr><tr class="ctx"><td class="ln">12</td><td class="ln">22</td><td class="sg"></td><td class="code" data-ind="4"><span class="lead">	</span>sum := 0</td></tr><tr class="ctx"><td class="ln">13</td><td class="ln">23</td><td class="sg"></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">for</span> _, it := <span class="kw">range</span> items {</td></tr><tr class="ctx"><td class="ln">14</td><td class="ln">24</td><td class="sg"></td><td class="code" data-ind="8"><span class="lead">		</span>sum += it.Price * it.Qty</td></tr></tbody></table></div></div></div><!--/gen--></div><!--/gen--></div><!--/gen-->
+</section>
+
+<section class="chapter" id="ch3">
+  <div class="ch-head"><span class="ch-num">Chapter 3 of 3</span><label class="seen-toggle"><input type="checkbox" id="seen-ch3" data-ch="ch3"> Mark as read</label></div>
+  <h2>Tests: what each one proves</h2>
+  <p class="lede">One spec picks the larger of two codes, and one ignores a code that doesn't exist.</p>
+  <div class="files-in"><span>shop/cart_test.go</span><span>README.md</span></div>
+  <div class="steps" data-gen="steps"><div class="step" data-gen="step"><aside class="step-notes" data-gen="notes"><div class="notes-in" data-gen="notes-in"><div class="notes-ch" data-gen="label">Chapter 3 · Tests: what each one proves</div></div><!--/gen--></aside><!--/gen--><div class="step-code" data-gen="code"><div class="file" id="file-3-1" data-path="shop/cart_test.go" data-file="shop/cart_test.go"><div class="file-h"><span class="path">shop/cart_test.go</span><span class="fstat"><b class="a">+17</b> <b class="d">−0</b></span><button class="copy-path" type="button" data-copy="shop/cart_test.go" aria-label="Copy path shop/cart_test.go" title="Copy the path. Click a line number to copy path:line.">Copy path</button><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-264a051b91b017d9370bb90474d15a1901caf319eaf12f0f8d1c9f6578e3d846" aria-label="Open shop/cart_test.go on GitHub">GitHub</a><label class="viewed-toggle"><input type="checkbox" data-path="shop/cart_test.go" data-part="file-3-1" aria-label="Viewed shop/cart_test.go"> Viewed</label></div><div class="hunk-h">@@ −0 +1 @@</div><div class="scroll"><table class="diff go"><tbody><tr class="add"><td class="ln"></td><td class="ln">1</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">package</span> shop</td></tr><tr class="add"><td class="ln"></td><td class="ln">2</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">3</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">import</span> <span class="st">&quot;testing&quot;</span></td></tr><tr class="add"><td class="ln"></td><td class="ln">4</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">5</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">func</span> TestTotalTakesTheBestCode(t *testing.T) {</td></tr><tr class="add"><td class="ln"></td><td class="ln">6</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>items := []Item{{Name: <span class="st">&quot;lamp&quot;</span>, Price: 6000, Qty: 2}}</td></tr><tr class="add"><td class="ln"></td><td class="ln">7</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">if</span> got := Total(items, []string{<span class="st">&quot;save10&quot;</span>, <span class="st">&quot;BIG25&quot;</span>}); got != 9000 {</td></tr><tr class="add"><td class="ln"></td><td class="ln">8</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>t.Fatalf(<span class="st">&quot;Total = %d, want 9000&quot;</span>, got)</td></tr><tr class="add"><td class="ln"></td><td class="ln">9</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>}</td></tr><tr class="add"><td class="ln"></td><td class="ln">10</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr><tr class="add"><td class="ln"></td><td class="ln">11</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"></td></tr><tr class="add"><td class="ln"></td><td class="ln">12</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code"><span class="kw">func</span> TestTotalIgnoresUnknownCodes(t *testing.T) {</td></tr><tr class="pin"><td colspan="4"><div class="finding s-nit-b" id="f2" data-short="No spec covers a cart under a code's minimum"><div class="f-head"><span class="sev s-nit">Nit</span><span class="cat">Tests</span><span class="spacer"></span><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-264a051b91b017d9370bb90474d15a1901caf319eaf12f0f8d1c9f6578e3d846R12">Open line on GitHub</a><button class="copy" type="button">Copy as PR comment</button></div><h3>No spec covers a cart under a code's minimum</h3>
+<p><code>BIG25</code> needs 100.00, and both specs pass whether or not that rule holds.</p><script type="text/markdown" class="md">**[Tests]** No spec covers a cart under a code's minimum
+
+`BIG25` needs 100.00, and both specs pass whether or not that rule holds.</script></div></td></tr><tr class="add"><td class="ln"></td><td class="ln">13</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>items := []Item{{Name: <span class="st">&quot;pen&quot;</span>, Price: 300, Qty: 1}}</td></tr><tr class="add"><td class="ln"></td><td class="ln">14</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span><span class="kw">if</span> got := Total(items, []string{<span class="st">&quot;NOPE&quot;</span>}); got != 300 {</td></tr><tr class="add"><td class="ln"></td><td class="ln">15</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="8"><span class="lead">		</span>t.Fatalf(<span class="st">&quot;Total = %d, want 300&quot;</span>, got)</td></tr><tr class="add"><td class="ln"></td><td class="ln">16</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code" data-ind="4"><span class="lead">	</span>}</td></tr><tr class="add"><td class="ln"></td><td class="ln">17</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">}</td></tr></tbody></table></div></div>
+<details class="more">
+    <summary>The 1 routine hunk in the README</summary>
+    <div class="file" id="file-4-1" data-path="README.md" data-file="README.md"><div class="file-h"><span class="path">README.md</span><span class="fstat"><b class="a">+1</b> <b class="d">−1</b></span><button class="copy-path" type="button" data-copy="README.md" aria-label="Copy path README.md" title="Copy the path. Click a line number to copy path:line.">Copy path</button><a class="gh" href="https://github.com/example/shop/pull/42/files#diff-b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5" aria-label="Open README.md on GitHub">GitHub</a><label class="viewed-toggle"><input type="checkbox" data-path="README.md" data-part="file-4-1" aria-label="Viewed README.md"> Viewed</label></div><div class="hunk-h">@@ −2 +2 @@</div><div class="scroll"><table class="diff md"><tbody><tr class="ctx"><td class="ln">2</td><td class="ln">2</td><td class="sg"></td><td class="code"></td></tr><tr class="ctx"><td class="ln">3</td><td class="ln">3</td><td class="sg"></td><td class="code">A tiny cart, used as the pull request in the Story Review test fixture.</td></tr><tr class="ctx"><td class="ln">4</td><td class="ln">4</td><td class="sg"></td><td class="code"></td></tr><tr class="del"><td class="ln">5</td><td class="ln"></td><td class="sg"><span aria-hidden="true">−</span><span class="vh">Removed</span></td><td class="code">Call `Total` with the cart&#x27;s items.</td></tr><tr class="add"><td class="ln"></td><td class="ln">5</td><td class="sg"><span aria-hidden="true">+</span><span class="vh">Added</span></td><td class="code">Call `Total` with the cart&#x27;s items <span class="wd">and any discount codes</span>.</td></tr></tbody></table></div></div>
+  </details></div><!--/gen--></div><!--/gen--></div><!--/gen-->
+</section>
+<section class="closing" id="end" aria-labelledby="end-h"><h2 id="end-h">Where this review stands</h2><div class="cl-row"><h3>Files</h3><p data-sum="files">4 files changed.</p><ul class="cl-files"><li data-path="README.md"><a href="#file-4-1">README.md</a> <span class="cl-parts"></span></li><li data-path="shop/cart.go"><a href="#file-2-1">shop/cart.go</a> <span class="cl-parts"></span></li><li data-path="shop/cart_test.go"><a href="#file-3-1">shop/cart_test.go</a> <span class="cl-parts"></span></li><li data-path="shop/discount.go"><a href="#file-1-1">shop/discount.go</a> <span class="cl-parts"></span></li></ul></div><div class="cl-row"><h3>Findings to post</h3><ul class="cl-finds"><li data-fid="f1"><span class="sev s-low">Low</span> <a href="#f1">A code's percent is never checked</a> <span class="cl-state">not copied yet</span></li><li data-fid="f2"><span class="sev s-nit">Nit</span> <a href="#f2">No spec covers a cart under a code's minimum</a> <span class="cl-state">not copied yet</span></li></ul></div><div class="cl-row"><h3>Chapters</h3><p data-sum="chapters">3 chapters.</p></div><p class="cl-top"><a href="#main">Back to the top</a></p></section>
+</main>
+</div>
+
+<script data-key="pr42">
+(function () {
+  var script = document.currentScript;
+  var KEY = (script && script.getAttribute("data-key")) || "review";
+
+  function load(name) {
+    try { return JSON.parse(localStorage.getItem(KEY + "-" + name) || "{}") || {}; } catch (e) { return {}; }
+  }
+
+  function save(name, value) {
+    try { localStorage.setItem(KEY + "-" + name, JSON.stringify(value)); } catch (e) {}
+  }
+
+  var seen = load("review-seen");
+  var copied = load("copied");
+
+  function paintChapter(ch, on) {
+    var li = document.querySelector('#toc li[data-ch="' + ch + '"]');
+    if (li) li.classList.toggle("seen", on);
+  }
+
+  document.querySelectorAll(".seen-toggle input").forEach(function (box) {
+    var ch = box.getAttribute("data-ch");
+    box.checked = !!seen[ch];
+    paintChapter(ch, box.checked);
+    box.addEventListener("change", function () {
+      seen[ch] = box.checked;
+      paintChapter(ch, box.checked);
+      save("review-seen", seen);
+      paintClosing();
+    });
+  });
+
+  // Viewed is kept per part: a file split across chapters is viewed once every part is.
+  var viewed = load("viewed-parts");
+  var headBoxes = document.querySelectorAll(".file-h input[data-part]");
+  var railBoxes = document.querySelectorAll(".ftree input[data-path]");
+  var rows = document.querySelectorAll(".ftree li[data-path]");
+  var partsOf = {};
+  document.querySelectorAll(".file[data-path][id]").forEach(function (f) {
+    var p = f.getAttribute("data-path");
+    (partsOf[p] = partsOf[p] || []).push(f.id);
+  });
+
+  function idsOf(path) { return partsOf[path] || ["path:" + path]; }
+
+  var legacy = load("viewed");
+  if (Object.keys(legacy).length) {
+    Object.keys(legacy).forEach(function (p) {
+      if (legacy[p]) idsOf(p).forEach(function (id) { viewed[id] = true; });
+    });
+    save("viewed-parts", viewed);
+    try { localStorage.removeItem(KEY + "-viewed"); } catch (e) {}
+  }
+
+  function countOf(path) {
+    var ids = idsOf(path), n = 0;
+    ids.forEach(function (id) { if (viewed[id]) n++; });
+    return { n: n, of: ids.length, full: n === ids.length };
+  }
+
+  function paintFiles() {
+    var done = 0;
+    rows.forEach(function (li) {
+      var c = countOf(li.getAttribute("data-path"));
+      var partial = c.n > 0 && !c.full;
+      li.classList.toggle("is-viewed", c.full);
+      li.classList.toggle("is-partial", partial);
+      var box = li.querySelector("input[data-path]");
+      if (box) { box.checked = c.full; box.indeterminate = partial; }
+      var parts = li.querySelector(".fparts");
+      if (parts) parts.textContent = partial ? c.n + "/" + c.of + " viewed" : c.of + " parts";
+      if (c.full) done++;
+    });
+    document.querySelectorAll(".ftree .tdir").forEach(function (dir) {
+      var leaves = dir.querySelectorAll("li[data-path]");
+      var n = 0;
+      leaves.forEach(function (li) { if (countOf(li.getAttribute("data-path")).full) n++; });
+      var prog = dir.querySelector(":scope > details > summary .dprog");
+      if (prog) prog.textContent = n + "/" + leaves.length;
+      dir.classList.toggle("is-done", leaves.length > 0 && n === leaves.length);
+    });
+    document.querySelectorAll(".file[data-path][id]").forEach(function (f) {
+      f.classList.toggle("is-viewed", !!viewed[f.id]);
+    });
+    headBoxes.forEach(function (b) { b.checked = !!viewed[b.getAttribute("data-part")]; });
+    document.querySelectorAll("a.pj[data-jump]").forEach(function (a) {
+      var on = !!viewed[a.getAttribute("data-jump")];
+      a.classList.toggle("is-viewed", on);
+      a.setAttribute("aria-label", a.getAttribute("data-label") + (on ? ", viewed" : ""));
+    });
+    var count = document.querySelector(".fcount");
+    if (count) count.textContent = done + " / " + rows.length + " viewed";
+    var bar = document.querySelector(".fbar > span");
+    if (bar) bar.style.width = rows.length ? (100 * done / rows.length) + "%" : "0";
+    paintClosing();
+  }
+
+  function paintClosing() {
+    var box = document.querySelector(".closing");
+    if (!box) return;
+    var files = box.querySelectorAll(".cl-files li[data-path]");
+    var done = 0;
+    files.forEach(function (li) {
+      var c = countOf(li.getAttribute("data-path"));
+      li.hidden = c.full;
+      if (c.full) done++;
+      var parts = li.querySelector(".cl-parts");
+      if (parts) parts.textContent = c.n > 0 && !c.full ? c.n + "/" + c.of + " parts viewed" : "";
+      var link = li.querySelector("a[href^='#']");
+      var next = idsOf(li.getAttribute("data-path")).filter(function (id) { return !viewed[id]; })[0];
+      if (link && next && partsOf[li.getAttribute("data-path")]) link.setAttribute("href", "#" + next);
+    });
+    var fs = box.querySelector('[data-sum="files"]');
+    if (fs) fs.textContent = done === files.length ? "All " + files.length + " files viewed."
+      : done + " of " + files.length + " files viewed. Still to view:";
+    box.querySelectorAll(".cl-finds li[data-fid]").forEach(function (li) {
+      var on = !!copied[li.getAttribute("data-fid")];
+      li.classList.toggle("is-done", on);
+      var st = li.querySelector(".cl-state");
+      if (st) st.textContent = on ? "copied" : "not copied yet";
+    });
+    var chs = document.querySelectorAll(".seen-toggle input");
+    var read = 0;
+    chs.forEach(function (b) { if (b.checked) read++; });
+    var cs = box.querySelector('[data-sum="chapters"]');
+    if (cs) cs.textContent = read + " of " + chs.length + " marked read.";
+  }
+
+  function setViewed(ids, on) {
+    ids.forEach(function (id) { if (on) viewed[id] = true; else delete viewed[id]; });
+    save("viewed-parts", viewed);
+    paintFiles();
+  }
+
+  headBoxes.forEach(function (b) {
+    b.addEventListener("change", function () { setViewed([b.getAttribute("data-part")], b.checked); });
+  });
+  railBoxes.forEach(function (b) {
+    b.addEventListener("change", function () { setViewed(idsOf(b.getAttribute("data-path")), b.checked); });
+  });
+
+  // A jump into a collapsed section lands nowhere unless every details around the target opens first.
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a[href^='#']");
+    var target = a && a.getAttribute("href").length > 1 && document.getElementById(a.getAttribute("href").slice(1));
+    for (var el = target && target.parentElement; el; el = el.parentElement) {
+      if (el.tagName === "DETAILS") el.open = true;
+    }
+  });
+
+  paintFiles();
+
+  var filesBox = document.querySelector(".files-box");
+  if (filesBox && window.matchMedia && window.matchMedia("(max-width: 980px)").matches) filesBox.open = false;
+
+  var tocLinks = {};
+  document.querySelectorAll("#toc a[href^='#']").forEach(function (a) { tocLinks[a.getAttribute("href").slice(1)] = a; });
+  if ("IntersectionObserver" in window) {
+    var current = null;
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var a = tocLinks[e.target.id];
+        if (!e.isIntersecting || !a || a === current) return;
+        if (current) { current.removeAttribute("aria-current"); current.parentElement.classList.remove("current"); }
+        current = a;
+        a.setAttribute("aria-current", "location");
+        a.parentElement.classList.add("current");
+      });
+    }, { rootMargin: "-15% 0px -80% 0px" });
+    Object.keys(tocLinks).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) spy.observe(el);
+    });
+  }
+
+  // The chapter bar sticks, so once the heading scrolls under it the bar shows the title itself.
+  var chapterBars = [];
+  document.querySelectorAll(".chapter").forEach(function (ch) {
+    var head = ch.querySelector(":scope > .ch-head"), h2 = ch.querySelector(":scope > h2");
+    if (!head || !h2) return;
+    var title = document.createElement("span");
+    title.className = "ch-t";
+    title.setAttribute("aria-hidden", "true");
+    title.textContent = h2.textContent;
+    var num = head.querySelector(".ch-num");
+    head.insertBefore(title, num ? num.nextSibling : head.firstChild);
+    chapterBars.push({ head: head, h2: h2 });
+  });
+
+  // Checked on scroll, not with an observer: a jump can carry the heading from below the screen to above it without crossing it.
+  function paintChapterBars() {
+    chapterBars.forEach(function (c) {
+      c.head.classList.toggle("stuck", c.h2.getBoundingClientRect().bottom < c.head.getBoundingClientRect().bottom);
+    });
+  }
+  var barsQueued = false;
+  function queueChapterBars() {
+    if (barsQueued) return;
+    barsQueued = true;
+    requestAnimationFrame(function () { barsQueued = false; paintChapterBars(); });
+  }
+  window.addEventListener("scroll", queueChapterBars, { passive: true });
+  window.addEventListener("resize", queueChapterBars);
+  paintChapterBars();
+
+  // Created up front, so a screen reader is already watching it when the first message lands.
+  var toast = document.createElement("div");
+  toast.className = "toast";
+  toast.setAttribute("role", "status");
+  document.body.appendChild(toast);
+
+  function showToast(text, ms) {
+    toast.textContent = text;
+    toast.classList.add("show");
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(function () { toast.classList.remove("show"); }, ms || 2000);
+  }
+
+  function copyText(text) {
+    function manual() {
+      showToast(text, 8000);
+      var range = document.createRange();
+      range.selectNodeContents(toast);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { showToast("Copied " + text); }, manual);
+    } catch (e) { manual(); }
+  }
+
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest) return;
+    var btn = e.target.closest(".copy-path");
+    if (btn) {
+      copyText(btn.getAttribute("data-copy"));
+      return;
+    }
+    var td = e.target.closest("table.diff td.ln");
+    if (!td || !(td.cellIndex === 1 || td.classList.contains("nl")) || !td.textContent.trim()) return;
+    var file = td.closest("[data-file]");
+    if (file) copyText(file.getAttribute("data-file") + ":" + td.textContent.trim());
+  });
+
+  document.querySelectorAll("button.copy").forEach(function (btn) {
+    var card = btn.closest(".finding");
+    var fid = card && card.id;
+    function markCopied() {
+      btn.textContent = "Copied";
+      btn.classList.add("done");
+      btn.title = "Copy the PR comment again";
+    }
+    if (fid && copied[fid]) markCopied();
+    btn.addEventListener("click", function () {
+      var src = card && card.querySelector("script.md");
+      if (!src) return;
+      var text = src.textContent.trim();
+      function fallback() {
+        var ta = card.querySelector("textarea.fallback");
+        if (!ta) {
+          ta = document.createElement("textarea");
+          ta.className = "fallback";
+          ta.readOnly = true;
+          ta.setAttribute("aria-label", "PR comment text");
+          card.appendChild(ta);
+        }
+        ta.value = text;
+        ta.focus();
+        ta.select();
+        btn.textContent = "Select and copy below";
+      }
+      try {
+        navigator.clipboard.writeText(text).then(function () {
+          markCopied();
+          if (fid) { copied[fid] = true; save("copied", copied); }
+          paintClosing();
+          showToast("Copied the PR comment");
+        }, fallback);
+      } catch (e) { fallback(); }
+    });
+  });
+
+  // Single-key shortcuts can be switched off in the rail (WCAG 2.1.4).
+  var prefs = load("prefs");
+  var keysOn = prefs.keys !== false;
+  var keysBox = document.querySelector(".keys-toggle input");
+  if (keysBox) {
+    keysBox.checked = keysOn;
+    keysBox.addEventListener("change", function () {
+      keysOn = keysBox.checked;
+      prefs.keys = keysOn;
+      save("prefs", prefs);
+    });
+  }
+
+  var root = document.documentElement;
+  var main = document.querySelector("main");
+  var rail = document.querySelector("nav.rail");
+  var codeColumn = document.querySelector(".step:not(.solo) > .step-code") || main;
+  var SPLIT_MIN = 900;
+  var VIEWS = {
+    rail: { key: "c", label: "Contents", what: "the contents", icon: '<path class="pane" d="M1.5 4.5a2 2 0 0 1 2-2H6v11H3.5a2 2 0 0 1-2-2z"/>',
+      away: "The contents sit above the review at this width." },
+    notes: { key: "t", label: "Notes", what: "the notes", icon: '<path class="pane" d="M10 2.5h2.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H10z"/>',
+      away: "The notes sit above the code at this width." },
+    split: { key: "s", label: "Split", icon: '<path d="M8 2.5v11"/>',
+      away: "Split view needs a wider code column. Hide a panel or widen the window." },
+    walk: { key: "w", label: "Steps", what: "the walkthrough", icon: '<path d="M4 5.5h8M4 8h8M4 10.5h5"/>', away: "" }
+  };
+  if (!document.querySelector(".wnote")) delete VIEWS.walk;
+  var viewButtons = {};
+  var splitOn = false;
+  var splitTables = null;
+
+  function wide(px) { return !window.matchMedia || window.matchMedia("(min-width: " + px + "px)").matches; }
+
+  function viewFits(name) {
+    if (name === "rail") return wide(981);
+    if (name === "notes") return wide(1360);
+    if (name === "walk") return true;
+    return codeColumn.getBoundingClientRect().width >= SPLIT_MIN;
+  }
+
+  function viewOn(name) {
+    if (name === "split") return prefs.split === true && viewFits("split");
+    return prefs[name] !== false || !viewFits(name);
+  }
+
+  function halfRow(tr, isNew) {
+    if (!tr) {
+      var nil = document.createElement("td");
+      nil.colSpan = 3;
+      nil.className = "nil";
+      return [nil];
+    }
+    var kind = tr.classList.contains("add") ? " add" : tr.classList.contains("del") ? " del" : "";
+    var ln = document.createElement("td");
+    ln.className = "ln" + (isNew ? " nl" : "") + kind;
+    ln.textContent = tr.cells[isNew ? 1 : 0].textContent;
+    var sign = tr.cells[2].cloneNode(true);
+    var code = tr.cells[3].cloneNode(true);
+    // A step's marker belongs to the new side only, or an unchanged line would show it twice.
+    if (!isNew) code.querySelectorAll(".wmark").forEach(function (m) { m.remove(); code.classList.remove("wm"); });
+    sign.className += kind;
+    code.className += kind;
+    return [ln, sign, code];
+  }
+
+  // Returns null for a table with lines on one side only (a new or deleted file, a context block): it reads better at full width.
+  function splitTable(table) {
+    var lines = [], hasOld = false, hasNew = false, digits = 3;
+    Array.prototype.forEach.call(table.rows, function (tr) {
+      if (tr.classList.contains("pin")) {
+        if (lines.length) lines[lines.length - 1].pins.push(tr);
+        return;
+      }
+      var o = tr.cells[0].textContent, n = tr.cells[1].textContent;
+      hasOld = hasOld || !!o;
+      hasNew = hasNew || !!n;
+      digits = Math.max(digits, o.length, n.length);
+      lines.push({ tr: tr, kind: tr.classList.contains("add") ? "add" : tr.classList.contains("del") ? "del" : "ctx", pins: [] });
+    });
+    if (!hasOld || !hasNew) return null;
+
+    var sp = document.createElement("table");
+    sp.className = table.className + " sp";
+    sp.hidden = true;
+    sp.style.setProperty("--lnw", digits);
+    sp.innerHTML = '<colgroup><col class="c-ln"><col class="c-sg"><col><col class="c-ln"><col class="c-sg"><col></colgroup><tbody></tbody>';
+    var body = sp.tBodies[0], pins = [];
+
+    function moveRow(src) {
+      var row = body.insertRow();
+      row.className = src.className;
+      var td = row.insertCell();
+      td.colSpan = 6;
+      row._twin = src;
+      src._twin = row;
+      pins.push([src.cells[0], td]);
+    }
+
+    // A step lights the half it covers: the new side, and the old side only for the removed lines it replaces.
+    function stepHalf(half, ws) {
+      if (!ws) return;
+      half.forEach(function (td) { td.setAttribute("data-ws", ws); });
+      half[0].className += " wsb";
+    }
+
+    function emit(left, right) {
+      var tr = body.insertRow();
+      var oldHalf = halfRow(left && left.tr, false), newHalf = halfRow(right && right.tr, true);
+      var cells = oldHalf.concat(newHalf);
+      cells[left ? 3 : 1].className += " rs";
+      stepHalf(oldHalf, left && left.kind === "del" && left.tr.getAttribute("data-ws"));
+      stepHalf(newHalf, right && right.tr.getAttribute("data-ws"));
+      cells.forEach(function (td) { tr.appendChild(td); });
+      tr._twin = (left || right).tr;
+      [left, right].forEach(function (line) {
+        if (!line || line.tr._twin) return;
+        line.tr._twin = tr;
+        line.pins.forEach(moveRow);
+      });
+    }
+
+    for (var i = 0; i < lines.length;) {
+      if (lines[i].kind === "ctx") { emit(lines[i], lines[i]); i++; continue; }
+      var dels = [], adds = [];
+      while (i < lines.length && lines[i].kind === "del") dels.push(lines[i++]);
+      while (i < lines.length && lines[i].kind === "add") adds.push(lines[i++]);
+      for (var k = 0; k < Math.max(dels.length, adds.length); k++) emit(dels[k], adds[k]);
+    }
+    table.parentNode.appendChild(sp);
+    return { unified: table, split: sp, pins: pins };
+  }
+
+  // A finding card exists once (its id, its copy button), so it moves between the two tables.
+  function setSplit(on) {
+    if (on && !splitTables) {
+      splitTables = [];
+      document.querySelectorAll(".file:not(.context) table.diff").forEach(function (table) {
+        var made = splitTable(table);
+        if (made) splitTables.push(made);
+      });
+    }
+    (splitTables || []).forEach(function (t) {
+      t.unified.hidden = on;
+      t.split.hidden = !on;
+      t.pins.forEach(function (pin) {
+        var from = pin[on ? 0 : 1], to = pin[on ? 1 : 0];
+        while (from.firstChild) to.appendChild(from.firstChild);
+      });
+    });
+    splitOn = on;
+  }
+
+  function syncView() {
+    root.classList.toggle("rail-off", prefs.rail === false);
+    root.classList.toggle("notes-off", prefs.notes === false);
+    root.classList.toggle("walk-off", !!VIEWS.walk && prefs.walk === false);
+    // Collapsed, the contents show only chapter numbers, so each link names its chapter on hover.
+    document.querySelectorAll("#toc a").forEach(function (a) {
+      var t = a.querySelector(".t");
+      if (prefs.rail === false && viewFits("rail") && t) a.title = t.textContent; else a.removeAttribute("title");
+    });
+    if (viewOn("split") !== splitOn) setSplit(!splitOn);
+    scheduleWalks();
+    Object.keys(viewButtons).forEach(function (name) {
+      var v = VIEWS[name], btn = viewButtons[name], on = viewOn(name), fits = viewFits(name);
+      btn.setAttribute("aria-pressed", String(on));
+      if (fits) btn.removeAttribute("aria-disabled"); else btn.setAttribute("aria-disabled", "true");
+      btn.title = !fits ? v.away
+        : name === "split" ? (on ? "Show the diff unified (s)" : "Show the diff side by side (s)")
+        : (on ? "Hide " : "Show ") + v.what + " (" + v.key + ")";
+    });
+  }
+
+  function anchorAt() {
+    var box = main.getBoundingClientRect();
+    var x = box.left + Math.min(120, box.width / 2);
+    for (var y = 90; y < window.innerHeight; y += 60) {
+      var el = document.elementFromPoint(x, y);
+      if (!el || !main.contains(el) || el.closest(".file-h, .ch-head")) continue;
+      el = el.closest("tr") || el;
+      if (!el.matches("main, section, details, .steps, .step, .step-code, .step-notes, .file, .scroll")) return el;
+    }
+    return null;
+  }
+
+  // Hiding a panel or splitting the diff rewraps the code, so the line being read is put back where it was.
+  function keepPlace(change) {
+    var el = window.scrollY > 0 ? anchorAt() : null;
+    var top = el && el.getBoundingClientRect().top;
+    change();
+    if (el && !shown(el)) el = el._twin;
+    if (el && shown(el)) window.scrollBy({ top: el.getBoundingClientRect().top - top, behavior: "instant" });
+  }
+
+  function toggleView(name, viaKey) {
+    if (!viewFits(name)) { showToast(VIEWS[name].away, 4000); return; }
+    var on = !viewOn(name);
+    keepPlace(function () {
+      prefs[name] = on;
+      save("prefs", prefs);
+      syncView();
+    });
+    var active = document.activeElement;
+    if (active && active !== document.body && !shown(active)) viewButtons[name].focus({ preventScroll: true });
+    if (viaKey) showToast(name === "split" ? (on ? "Split diff" : "Unified diff") : VIEWS[name].label + (on ? " shown" : " hidden"));
+  }
+
+  if (rail && main) {
+    var bar = document.createElement("div");
+    bar.className = "viewbar";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "View");
+    Object.keys(VIEWS).forEach(function (name) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/>' +
+        VIEWS[name].icon + '</svg><span class="vb-t">' + VIEWS[name].label + "</span>";
+      btn.addEventListener("click", function () { toggleView(name); });
+      viewButtons[name] = btn;
+      bar.appendChild(btn);
+    });
+    rail.insertBefore(bar, rail.firstChild);
+
+    document.querySelectorAll(".step:not(.solo) > .step-notes").forEach(function (aside) {
+      var back = document.createElement("button");
+      back.type = "button";
+      back.className = "notes-back";
+      back.innerHTML = "Notes hidden <span>Show notes</span>";
+      back.addEventListener("click", function () { toggleView("notes"); });
+      aside.appendChild(back);
+    });
+
+    syncView();
+    var resizing = false;
+    window.addEventListener("resize", function () {
+      if (resizing) return;
+      resizing = true;
+      requestAnimationFrame(function () {
+        resizing = false;
+        if (viewOn("split") !== splitOn) keepPlace(syncView); else syncView();
+      });
+    });
+  }
+
+  function shown(el) { return el.getClientRects().length > 0; }
+
+  function markOf(ws) {
+    return Array.prototype.filter.call(document.querySelectorAll('.wmark[data-ws="' + ws + '"]'), shown)[0] || null;
+  }
+
+  // Each note sits level with its marker, pushed down only as far as the note above it needs.
+  function layoutWalks() {
+    var aligned = !!VIEWS.walk && viewOn("walk") && viewOn("notes") && wide(1360);
+    document.querySelectorAll(".wcol").forEach(function (col) {
+      var notes = col.querySelectorAll(".wnote");
+      col.classList.toggle("aligned", aligned);
+      if (!aligned) {
+        notes.forEach(function (li) { li.style.top = ""; });
+        col.style.height = "";
+        return;
+      }
+      var base = col.getBoundingClientRect().top, floor = 0;
+      notes.forEach(function (li) {
+        var mark = markOf(li.getAttribute("data-ws"));
+        var y = Math.max(mark ? mark.getBoundingClientRect().top - base - 3 : floor, floor);
+        li.style.top = y + "px";
+        floor = y + li.offsetHeight + 6;
+      });
+      col.style.height = floor + "px";
+    });
+  }
+
+  var walksQueued = false;
+  function scheduleWalks() {
+    if (walksQueued || !document.querySelector(".wcol")) return;
+    walksQueued = true;
+    requestAnimationFrame(function () { walksQueued = false; layoutWalks(); });
+  }
+
+  function lightStep(ws, on) {
+    document.querySelectorAll('[data-ws="' + ws + '"]').forEach(function (el) { el.classList.toggle("ws-on", on); });
+  }
+
+  if (document.querySelector(".wcol")) {
+    ["mouseover", "focusin"].forEach(function (type) {
+      document.addEventListener(type, function (e) {
+        var el = e.target.closest && e.target.closest(".wnote, .wmark");
+        if (el) lightStep(el.getAttribute("data-ws"), true);
+      });
+    });
+    ["mouseout", "focusout"].forEach(function (type) {
+      document.addEventListener(type, function (e) {
+        var el = e.target.closest && e.target.closest(".wnote, .wmark");
+        if (el && !(e.relatedTarget && el.contains(e.relatedTarget))) lightStep(el.getAttribute("data-ws"), false);
+      });
+    });
+    document.addEventListener("click", function (e) {
+      var num = e.target.closest(".wnote .wnum"), mark = e.target.closest(".wmark");
+      if (num) {
+        var m = markOf(num.parentNode.getAttribute("data-ws"));
+        if (m) m.closest("tr").scrollIntoView({ block: "center", behavior: "instant" });
+      } else if (mark) {
+        e.preventDefault();
+        var note = document.getElementById(mark.getAttribute("data-ws"));
+        var box = note && shown(note) && note.getBoundingClientRect();
+        if (box && (box.top < 0 || box.bottom > window.innerHeight)) note.scrollIntoView({ block: "center", behavior: "instant" });
+        if (note) note.querySelector(".wnum").focus({ preventScroll: true });
+      }
+    });
+    window.addEventListener("resize", scheduleWalks);
+    document.addEventListener("toggle", scheduleWalks, true);
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(scheduleWalks);
+      document.querySelectorAll(".step.has-walk > .step-code").forEach(function (el) { ro.observe(el); });
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleWalks);
+    scheduleWalks();
+  }
+  function restAt(el) {
+    var pad = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
+    return pad + (parseFloat(getComputedStyle(el).scrollMarginTop) || 0);
+  }
+
+  function jump(selector, dir) {
+    var els = Array.prototype.filter.call(document.querySelectorAll(selector), shown);
+    if (dir < 0) els.reverse();
+    for (var i = 0; i < els.length; i++) {
+      var gap = els[i].getBoundingClientRect().top - restAt(els[i]);
+      if (dir > 0 ? gap > 2 : gap < -2) {
+        els[i].scrollIntoView({ block: "start", behavior: "instant" });
+        return els[i];
+      }
+    }
+    return null;
+  }
+
+  function fileAtTop() {
+    var y = (parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0) + 24;
+    var els = document.querySelectorAll(".file[data-path][id]");
+    for (var i = 0; i < els.length; i++) {
+      var r = els[i].getBoundingClientRect();
+      if (r.top <= y && r.bottom > y && shown(els[i])) return els[i];
+    }
+    return null;
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (!keysOn || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT" ||
+      (t.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(t.type)))) return;
+    var k = e.key;
+    if (k === "j" || k === "k") {
+      if (!jump(".file[data-path][id]", k === "j" ? 1 : -1)) showToast(k === "j" ? "No file below" : "No file above");
+    } else if (k === "n" || k === "p") {
+      if (!jump(".finding[id]", k === "n" ? 1 : -1)) showToast(k === "n" ? "No finding below" : "No finding above");
+    } else if (k === "v") {
+      var f = fileAtTop();
+      var box = f && f.querySelector(".file-h input[data-part]");
+      if (!box) { showToast("No file at the top of the screen"); return; }
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change"));
+      showToast((box.checked ? "Viewed " : "Not viewed ") + f.getAttribute("data-path"));
+    } else if (k === "c" || k === "t" || k === "s" || k === "w") {
+      var view = { c: "rail", t: "notes", s: "split", w: "walk" }[k];
+      if (!viewButtons[view]) return;
+      toggleView(view, true);
+    } else {
+      return;
+    }
+    e.preventDefault();
+  });
+})();
+</script>

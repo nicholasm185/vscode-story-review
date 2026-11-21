@@ -133,14 +133,19 @@ npm run watch          # compile on save
 npm run release        # package and install in one step
 ```
 
-`npm test -- <review folder> <checkout> <chromium>` loads a built page with the page-side scripts and
-a stand-in for VS Code in headless Chromium, and checks the messages they send. Its constants are
-pinned to one review and its files, so edit them to run it against another review.
-`SHOTS=1` also writes screenshots to `test-out/`. The extension host side (language features,
-checkout, GitHub calls) has no automated test; try it in VS Code.
+`npm test` runs the page-side scripts in headless Chrome or Chromium against a made-up review in
+`test/fixture`: a small Go module and a pull request that adds discount codes to its cart. A stand-in
+for VS Code records the messages the scripts send, and the test checks them. Set `CHROME` to pick
+the browser, and `SHOTS=1` to write screenshots to `test-out/`. The extension host side (language
+features, checkout, GitHub calls) has no automated test; try it in VS Code.
 
-Pushing a `v*` tag runs `.github/workflows/build.yml`, which packages the extension and attaches the
-`.vsix` to a GitHub release. Every push to `main` keeps the package as a workflow artifact.
+`npm run fixture` rebuilds `test/fixture/review/page.html` with the `story-review` skill, from
+`~/.claude/skills/story-review` or the folder in `STORY_REVIEW_SKILL`. Rebuild it after the skill's
+page format changes, run the test, and commit the new page.
+
+Every push runs `.github/workflows/build.yml`, which runs the test and packages the extension. A
+`v*` tag also attaches the `.vsix` to a GitHub release, and a push to `main` keeps it as a workflow
+artifact.
 
 ### How it fits together
 
@@ -170,3 +175,7 @@ these working or update `media/bridge.js`:
   with `data-ws` for walkthrough steps.
 - `localStorage` keys the page's script writes. The extension stores them per review.
 - A `<script data-key>` page script, and `<style>` as the first style block (the Notes view reuses it).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

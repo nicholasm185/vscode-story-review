@@ -3,8 +3,8 @@
   "displayName": "Story Review",
   "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
   "publisher": "local",
-  "version": "0.3.2",
-  "license": "UNLICENSED",
+  "version": "0.3.3",
+  "license": "MIT",
   "private": true,
   "engines": {
     "vscode": "^1.90.0"
@@ -126,15 +126,20 @@
   "scripts": {
     "build": "tsc -p .",
     "watch": "tsc -w -p .",
-    "package": "npm run build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package --allow-missing-repository --skip-license -o dist/",
+    "package": "npm run build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package -o dist/",
     "install-vsix": "node scripts/install.mjs",
     "release": "npm run package && npm run install-vsix",
-    "test": "node test/bridge-test.mjs"
+    "test": "node test/bridge-test.mjs",
+    "fixture": "node test/fixture/build.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "~1.90.0",
     "@vscode/vsce": "^3.2.0",
     "typescript": "^5.4.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicholasm185/vscode-story-review.git"
   }
 }

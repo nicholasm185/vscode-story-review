@@ -1,0 +1,15 @@
+{
+ "author": {
+  "login": "example-author",
+  "name": "Example Author"
+ },
+ "baseRefName": "main",
+ "headRefName": "feat/discount-codes",
+ "headRefOid": "f93bcce244ad30d541a77e8631e56c2f4d743721",
+ "number": 42,
+ "reviewDecision": "",
+ "reviews": [],
+ "statusCheckRollup": [],
+ "title": "feat(cart): apply discount codes",
+ "url": "https://github.com/example/shop/pull/42"
+}

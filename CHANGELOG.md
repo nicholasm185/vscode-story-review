@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- The test runs against a made-up review bundled in `test/fixture`, so it needs no other checkout,
+  finds Chrome or Chromium itself, and runs in CI before packaging. `npm run fixture` rebuilds the
+  fixture page with the `story-review` skill.
+- MIT license.
+
 ## 0.3.2
 
 - The page's own contents column never shows in VS Code. Hiding it on the page and then showing VS

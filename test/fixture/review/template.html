@@ -1,0 +1,96 @@
+<title>PR #42 Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<!--@style-->
+
+<div class="page">
+<nav class="rail" aria-label="Chapters">
+  <!--@toc-->
+  <!--@findings-->
+  <!--@files-->
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow"><span>example/shop</span><span>Pull request #42</span><span>Test fixture</span><span>Reviewed 1 Jan 2026</span></div>
+  <h1>The cart takes the best discount code off its total</h1>
+  <p class="prtitle">feat(cart): apply discount codes</p>
+  <div class="stack" aria-label="Stack">
+    <span class="lbl">Stack</span>
+    <span class="node">main</span><span class="arrow">←</span>
+    <span class="node here">#42 this PR</span>
+  </div>
+  <!--@meta-->
+</header>
+
+<section class="verdict" aria-labelledby="verdict-h">
+  <div class="label">Verdict</div>
+  <h2 id="verdict-h">Approve after 1 change</h2>
+  <p>This is the made-up review the extension's tests run against. `Total` now takes discount codes and subtracts the largest one a cart qualifies for. Nothing a reader would bill is wrong, but a code's percent is never checked.</p>
+  <!--@findings-table-->
+</section>
+
+<section class="checked" aria-labelledby="checked-h">
+  <h2 id="checked-h">Checked and fine</h2>
+  <ul>
+    <li><span>Unknown codes. `lookup` reports them as missing, and `bestDiscount` skips them.</span></li>
+    <li class="no"><span>Nothing here was run. This review is a test fixture.</span></li>
+  </ul>
+</section>
+
+<section class="chapter" id="ch1">
+  <h2>The codes: what each one takes off</h2>
+  <p class="lede">A code is a percent off, and only once the cart reaches the code's minimum.</p>
+  <p><b>The example.</b> A cart of two lamps at 60.00 each, with the codes `save10` and `BIG25`.</p>
+  <!--@diff file="shop/discount.go" hunks="all" walk="codes"-->
+<!--@walk codes-->
+<!--@step at="type Discount struct {" to="}"-->
+<p>A code, the percent it takes off, and the smallest cart it works on.</p>
+<!--@step at="func bestDiscount(" to="best := 0"-->
+<p>The largest amount any code takes off. It starts at nothing.</p>
+<!--@step at="for _, code := range codes {" to="return best"-->
+<p>Each known code the cart qualifies for is tried, and the biggest wins.</p>
+<table class="trace"><thead><tr><th>Code</th><th>Off</th><th>Best</th></tr></thead>
+<tbody><tr><td>save10</td><td>12.00</td><td>12.00</td></tr><tr class="pick"><td>BIG25</td><td>30.00</td><td>30.00</td></tr></tbody></table>
+<!--@end-->
+</section>
+
+<section class="chapter" id="ch2">
+  <h2>The cart: Total takes the best code</h2>
+  <p class="lede">`Total` gains the codes and subtracts the best one from the subtotal.</p>
+  <!--@diff file="shop/cart.go" hunks="all" walk="total"-->
+<!--@walk total-->
+<!--@step at="func Total(items []Item, codes []string) int {" to="sum := subtotal(items)"-->
+<p>The codes are a new argument, so every caller changes.</p>
+<!--@step at="off := bestDiscount(sum, codes)"-->
+<p>The best code for this cart. The lamps: 30.00.</p>
+<!--@step at="if off &gt; sum {" to="return sum - off"-->
+<p>A discount never takes the total below zero.</p>
+<!--@end-->
+<!--@finding f1 sev="low" cat="Validation" short="A code's percent is never checked" at="if off &gt; sum {"-->
+<h4>A code's percent is never checked, so a typo there is hidden by the clamp</h4>
+<p>A `Percent` of 150 takes more than the cart, and the clamp at `cart.go:14` turns it into a free cart without a word.</p>
+<!--@fix-->
+<p>Check each code's percent is between 1 and 100 when the list is built.</p>
+<!--@end-->
+</section>
+
+<section class="chapter" id="ch3">
+  <h2>Tests: what each one proves</h2>
+  <p class="lede">One spec picks the larger of two codes, and one ignores a code that doesn't exist.</p>
+  <!--@diff file="shop/cart_test.go" hunks="all"-->
+<!--@finding f2 sev="nit" cat="Tests" short="No spec covers a cart under a code's minimum" at="TestTotalIgnoresUnknownCodes"-->
+<h4>No spec covers a cart under a code's minimum</h4>
+<p>`BIG25` needs 100.00, and both specs pass whether or not that rule holds.</p>
+<!--@end-->
+  <details class="more">
+    <summary>The {n} routine hunk in the README</summary>
+    <!--@diff file="README.md" hunks="all"-->
+  </details>
+</section>
+</main>
+</div>
+
+<!--@script key="pr42"-->
