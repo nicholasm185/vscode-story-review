@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4
+
+- The test starts Chrome reliably in CI: it prefers Google Chrome over the `chromium` snap wrapper,
+  runs without the sandbox in CI, and prints the browser's output when it doesn't start.
+- Pushing a tag again updates its release's `.vsix` instead of failing.
+- The first release with the 0.3.3 changes. The `v0.3.3` tag has no release, because its test
+  failed in CI.
+
 ## 0.3.3
 
 - The test runs against a made-up review bundled in `test/fixture`, so it needs no other checkout,
