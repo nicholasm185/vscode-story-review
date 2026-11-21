@@ -129,9 +129,18 @@ await sleep(2500);
 check("progress comes back after reopening", await js(`!!document.querySelector('.viewed-toggle input[data-part="${part}"]')?.checked`));
 await js(`document.querySelector("#ch5").scrollIntoView({ behavior: "instant" })`);
 await sleep(300);
-const rail = await js(`(() => { const r = document.querySelector(".rail").getBoundingClientRect(); return { top: Math.round(r.top), left: Math.round(r.left), w: Math.round(r.width), files: document.querySelector(".files-box")?.open }; })()`);
-check("at 820px the rail stays pinned beside the page", rail.top >= 0 && rail.top < 40 && rail.w > 150 && rail.left < 40, JSON.stringify(rail));
-check("at 820px the files tree is open", rail.files === true);
+// The page's own "contents hidden" layout, then a wider panel: the page must still use the full width.
+await js(`document.documentElement.classList.add("rail-off")`);
+await send("Input.dispatchKeyEvent", { type: "keyDown", key: "c", text: "c" });
+await send("Input.dispatchKeyEvent", { type: "keyUp", key: "c" });
+await send("Emulation.setDeviceMetricsOverride", { width: 1300, height: 1000, deviceScaleFactor: 1, mobile: false });
+await sleep(400);
+const wide = await js(`(() => ({ rail: getComputedStyle(document.querySelector(".rail")).display, main: Math.round(document.querySelector("main").getBoundingClientRect().width), vw: innerWidth }))()`);
+check("the page's own rail never shows, even with its contents hidden", wide.rail === "none" && wide.main > wide.vw - 80, JSON.stringify(wide));
+await send("Emulation.setDeviceMetricsOverride", { width: 820, height: 1000, deviceScaleFactor: 1, mobile: false });
+await sleep(300);
+const narrow = await js(`Math.round(document.querySelector("main").getBoundingClientRect().width)`);
+check("at 820px the page uses the full width", narrow > 740, String(narrow));
 const sideways = await js(`document.documentElement.scrollWidth > document.documentElement.clientWidth`);
 check("at 820px nothing scrolls sideways", !sideways);
 // The test's own hover payload carries an inline handler; the page's script lock refusing it is expected.
@@ -168,6 +177,12 @@ check("a note hovered in the side view lights its lines", await js(`document.que
 await js(`window.__msgs.length = 0; window.postMessage({ type: "setRead", href: "#ch2", on: true }, "*")`);
 await sleep(400);
 const after = await lastMsg("outline");
+await js(`window.__msgs.length = 0; window.postMessage({ type: "keys", on: false }, "*")`);
+await sleep(300);
+const keysMsg = await lastMsg("outline");
+check("the shortcuts toggle turns single-key shortcuts off", await js(`document.querySelector(".keys-toggle input").checked === false`) && keysMsg && keysMsg.outline.keysOn === false);
+await js(`window.postMessage({ type: "keys", on: true }, "*")`);
+await sleep(200);
 check("a chapter ticked in the side view is marked read", await js(`document.querySelector('.seen-toggle input[data-ch="ch2"]').checked`) && after && after.outline.chapters.find((c) => c.href === "#ch2").read === true);
 await js(`window.postMessage({ type: "goto", href: "#f2" }, "*")`);
 await sleep(1500);

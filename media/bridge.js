@@ -205,18 +205,7 @@
     vscode.postMessage({ type: e.shiftKey ? "references" : "definition", path: w.path, line: w.line, col: w.col, word: w.word });
   }
 
-  function addHint() {
-    const keys = document.querySelector(".rail .shortcuts p");
-    if (!keys) return;
-    const mac = /Mac/.test(navigator.platform);
-    const k = mac ? "⌘" : "Ctrl";
-    keys.insertAdjacentHTML(
-      "beforeend",
-      `<br><b>In VS Code</b><br>hover a name: its type and docs<br><kbd>${k}</kbd>-click: go to definition<br>` +
-        `<kbd>⇧</kbd><kbd>${k}</kbd>-click: find references<br>click a line number: open it beside` +
-        `<br><kbd>⌥</kbd>-click a line number: copy path:line`,
-    );
-  }
+
 
   const text = (el) => (el ? el.textContent.replace(/\s+/g, " ").trim() : "");
 
@@ -244,7 +233,8 @@
       path: li.getAttribute("data-path"), href: (li.querySelector("a[href^='#']") || { getAttribute: () => "" }).getAttribute("href"),
       viewed: li.classList.contains("is-viewed"), partial: li.classList.contains("is-partial"), meta: text(li.querySelector(".fmeta")),
     }));
-    return { title: text(document.querySelector("h1")), chapters, findings, files, viewed: text(document.querySelector(".fcount")) };
+    const keys = document.querySelector(".keys-toggle input");
+    return { title: text(document.querySelector("h1")), chapters, findings, files, viewed: text(document.querySelector(".fcount")), keysOn: keys ? keys.checked : true };
   }
 
   let outlineTimer, lastOutline = "";
@@ -336,7 +326,6 @@
       applyViewed(m.viewed, m.listed || m.viewed);
     } else if (m.type === "layout") {
       const root = document.documentElement;
-      root.classList.toggle("sr-no-rail", !!m.rail);
       root.classList.toggle("sr-no-notes", !!m.notes);
       window.dispatchEvent(new Event("resize"));
       stepKey = null;
@@ -349,6 +338,10 @@
     } else if (m.type === "setViewed") {
       const box = document.querySelector(`.ftree input[data-path="${CSS.escape(m.path)}"]`);
       if (box && box.checked !== m.on) box.click();
+    } else if (m.type === "keys") {
+      const box = document.querySelector(".keys-toggle input");
+      if (box && box.checked !== m.on) box.click();
+      sendOutline();
     } else if (m.type === "view") {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: m.key, bubbles: true }));
     } else if (m.type === "open") {
@@ -384,6 +377,13 @@
     vscode.postMessage({ type: "ready" });
   }
 
+  // The page's contents column never shows in VS Code, so its "c" key would only toggle something invisible.
+  window.addEventListener("keydown", (e) => {
+    const t = e.target;
+    const typing = t && (t.isContentEditable || /^(TEXTAREA|SELECT)$/.test(t.tagName) || (t.tagName === "INPUT" && !/^(checkbox|radio|button)$/.test(t.type)));
+    if (e.key === "c" && !e.ctrlKey && !e.metaKey && !e.altKey && !typing) e.stopImmediatePropagation();
+  }, true);
+
   document.addEventListener("DOMContentLoaded", () => {
     followTheme();
     new MutationObserver(followTheme).observe(document.body, { attributes: true, attributeFilter: ["class"] });
@@ -401,7 +401,6 @@
     window.addEventListener("keydown", (e) => { if (e.metaKey || e.ctrlKey) document.documentElement.classList.add("sr-mod"); });
     window.addEventListener("keyup", (e) => { if (!e.metaKey && !e.ctrlKey) document.documentElement.classList.remove("sr-mod"); });
     window.addEventListener("blur", () => document.documentElement.classList.remove("sr-mod"));
-    addHint();
     document.querySelectorAll(".file[data-file] .file-h .path").forEach((el) => {
       const block = el.closest(".file[data-file]");
       if (!firstLine(block)) return;
@@ -411,8 +410,6 @@
       el.title = "Open the file beside the review";
       el.addEventListener("keydown", (e) => { if (e.key === "Enter") openFile(block); });
     });
-    const files = document.querySelector(".files-box");
-    if (files && window.innerWidth > 640) files.open = true;
     initSides();
   });
 })();

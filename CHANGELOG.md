@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- The page's own contents column never shows in VS Code. Hiding it on the page and then showing VS
+  Code's side bar no longer squeezes the page into a narrow column.
+- A keyboard button in the Chapters view lists the shortcuts and turns single-key shortcuts on or
+  off, since the page's own shortcuts box lived in the hidden column.
+
 ## 0.3.1
 
 - File names at the top of each diff, and in the Notes view, open the file beside the review.

@@ -16,7 +16,10 @@ it opens the ones the skill builds. In Claude Code, install the skill with
 - **Code beside the review.** Clicking a line number or a file name opens that file in an editor
   next to the panel. ⌥-click on a line number copies `path:line` instead.
 - **Contents in the side bar.** The Story Review view lists the chapters (with read marks), the
-  findings, and the files (with Viewed marks). Clicking an item moves the page there.
+  findings, and the files (with Viewed marks). Clicking an item moves the page there. The page's own
+  contents column stays hidden in VS Code.
+- **Keyboard shortcuts.** The keyboard button in the Chapters view lists the page's keys and mouse
+  actions, and turns the page's single-key shortcuts on or off.
 - **Notes in the other side bar.** The Notes view shows the prose and walkthrough notes for the code
   in view. Hovering a note lights its lines on the page.
 - **Viewed marks synced with GitHub.** Ticking a file marks it viewed on the pull request's Files

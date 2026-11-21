@@ -12,15 +12,11 @@ code { color: inherit; }
 .sr-tip code { font-family: var(--mono, monospace); font-size: 12px; }
 .sr-tip hr { border: 0; border-top: 1px solid var(--line, #444); margin: 8px 0; }
 .sr-tip a { color: var(--accent, inherit); }
-/* An editor beside the panel halves its width; keep the rail pinned there, or the overview scrolls away. */
-@media (min-width: 641px) and (max-width: 980px) {
-  :root .page { grid-template-columns: 200px minmax(0, 1fr); gap: 20px; }
-  :root .rail { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; border: 0; background: none; padding: 0; }
-}
-/* While the side views are open they carry the contents and the notes, so the code gets the panel's width. */
-:root.sr-no-rail .rail { display: none; }
-:root.sr-no-rail .page { grid-template-columns: minmax(0, 1fr); max-width: none; }
-:root.sr-no-rail main { max-width: none; }
+/* The Story Review side bar is the contents in VS Code. !important beats the page's saved "contents hidden" layout. */
+.rail { display: none !important; }
+.page { grid-template-columns: minmax(0, 1fr) !important; max-width: none !important; }
+main { max-width: none !important; }
+/* While the Notes view is open it carries the notes, so the code gets the panel's width. */
 :root.sr-no-notes .step:not(.solo) { display: block; }
 :root.sr-no-notes .step:not(.solo) > .step-notes { display: none; }
 .file-h .path.sr-open { cursor: pointer; }

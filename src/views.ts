@@ -7,6 +7,7 @@ export interface Outline {
   findings: { href: string; sev: string; short: string; loc: string }[];
   files: { path: string; href: string; viewed: boolean; partial: boolean; meta: string }[];
   viewed: string;
+  keysOn?: boolean;
 }
 
 export interface PanelLink {
@@ -184,6 +185,7 @@ export class Hub {
         this.panel?.reveal();
       }),
       vscode.commands.registerCommand("storyReview.toggleSplit", () => this.panel?.post({ type: "view", key: "s" })),
+      vscode.commands.registerCommand("storyReview.keys", () => this.showKeys()),
     );
   }
 
@@ -237,6 +239,29 @@ export class Hub {
 
   layout(): void {
     this.panel?.post({ type: "layout", rail: this.views.some((v) => v.visible), notes: this.notes.visible });
+  }
+
+  private async showKeys(): Promise<void> {
+    const on = this.outline?.keysOn !== false;
+    const detail = [
+      "On the page" + (on ? "" : " (single-key shortcuts are off)") + ":",
+      "j / k   next or previous file",
+      "n / p   next or previous finding",
+      "v   Viewed for the file at the top",
+      "s   split or unified diff",
+      "w   show or hide the walkthrough markers",
+      "t   the page's notes column, while the Notes view is closed",
+      "",
+      "With the mouse:",
+      "hover a name   its type and docs",
+      "⌘ or Ctrl-click a name   go to its definition",
+      "⇧⌘ or ⇧Ctrl-click a name   find its references",
+      "click a line number or a file name   open it beside the review",
+      "⌥-click a line number   copy path:line",
+    ].join("\n");
+    const toggle = on ? "Turn Single-Key Shortcuts Off" : "Turn Single-Key Shortcuts On";
+    const pick = await vscode.window.showInformationMessage("Story Review keyboard shortcuts", { modal: true, detail }, toggle);
+    if (pick === toggle) this.panel?.post({ type: "keys", on: !on });
   }
 
   private refresh(): void {

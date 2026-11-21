@@ -3,7 +3,7 @@
   "displayName": "Story Review",
   "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
   "publisher": "local",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "UNLICENSED",
   "private": true,
   "engines": {
@@ -29,6 +29,12 @@
         "title": "Split or Unified Diff",
         "category": "Story Review",
         "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "storyReview.keys",
+        "title": "Keyboard Shortcuts",
+        "category": "Story Review",
+        "icon": "$(keyboard)"
       },
       {
         "command": "storyReview.goto",
@@ -102,6 +108,11 @@
           "command": "storyReview.toggleSplit",
           "when": "view == storyReview.chapters",
           "group": "navigation@2"
+        },
+        {
+          "command": "storyReview.keys",
+          "when": "view == storyReview.chapters",
+          "group": "navigation@3"
         }
       ],
       "commandPalette": [
