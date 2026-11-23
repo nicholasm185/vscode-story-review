@@ -45,10 +45,7 @@ Writing the steps is also the review: a step you can't explain plainly is where 
 
 ## Reading
 
-Show the page the way the skill's step 7 says. A reader who opens reviews in the Story Review VS
-Code extension writes that here instead, for example: "I read reviews in the Story Review VS Code
-extension. Don't publish the page unless I ask; tell me to open it with **Story Review: Open
-Review**."
+Publish the page, or open it from disk, the way the skill's step 7 says.
 
 ## Lint
 

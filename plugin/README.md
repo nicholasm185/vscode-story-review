@@ -21,7 +21,12 @@ In Claude Code:
 /plugin install story-review@story-review
 ```
 
-To update later, run `/plugin marketplace update story-review`.
+To update later, run these in a shell, then restart Claude Code:
+
+```sh
+claude plugin marketplace update story-review
+claude plugin update story-review@story-review
+```
 
 Without the plugin system, copy the skill folder into your personal skills instead:
 
@@ -50,7 +55,7 @@ Ask Claude for a "story review of PR 1234", or run `/story-review:story-review 1
 With the Artifact tool, the page is published as a private claude.ai page. Without it, the page
 opens from disk. To read reviews in VS Code with hover and go to definition on the diff, install the
 Story Review extension from this repository (see the [main README](../README.md)), and say so in
-your style's `## Reading` section.
+your style's `## Reading` section (see below).
 
 ## Set your review style
 
@@ -58,8 +63,25 @@ The skill decides the flow and the page. Your style decides what the review chec
 reads: what to look for, what each severity means, the chapter order, the voice, and where you
 read the page.
 
-1. Copy `skills/story-review/references/default-style.md` to `~/.claude/story-reviews/style.md`.
+1. Start from the default style:
+
+   ```sh
+   mkdir -p ~/.claude/story-reviews
+   curl -fsSL https://raw.githubusercontent.com/nicholasm185/vscode-story-review/main/plugin/skills/story-review/references/default-style.md \
+     -o ~/.claude/story-reviews/style.md
+   ```
+
 2. Edit it. Anything you write there applies to your next review.
+
+To read reviews in the Story Review VS Code extension instead of as published pages, set the
+style's `## Reading` section to:
+
+```markdown
+## Reading
+
+I read reviews in the Story Review VS Code extension. Don't publish the page unless I ask; tell me
+to open it with **Story Review: Open Review**.
+```
 
 A repository can also commit team conventions to `.claude/story-review-style.md`. Your own file
 wins where the two disagree. With neither file, the skill uses the default style.

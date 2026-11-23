@@ -41,4 +41,5 @@ The skill's source is `plugin/skills/story-review/` in that repository, which is
 plugin marketplace. After a format change, run `npm run fixture` and `npm test` there: the
 extension's test reads a page this skill built, so a broken contract fails it. Then bump `version`
 in `plugin/.claude-plugin/plugin.json`, add a line to the CHANGELOG, and push. Users pick the new
-version up with `/plugin marketplace update story-review`.
+version up with `claude plugin marketplace update story-review`, then
+`claude plugin update story-review@story-review`, and a restart of Claude Code.

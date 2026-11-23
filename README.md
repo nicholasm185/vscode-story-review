@@ -57,14 +57,22 @@ Claude Code, on the machine where Claude runs:
 /plugin install story-review@story-review
 ```
 
-Update it later with `/plugin marketplace update story-review`. To use the skill without the
+To update it later, run `claude plugin marketplace update story-review`, then
+`claude plugin update story-review@story-review`, and restart Claude Code. To use the skill without the
 plugin system, copy `plugin/skills/story-review` into `~/.claude/skills/` instead; install it one
 way, not both. [plugin/README.md](plugin/README.md) lists the skill's own requirements (`git`, `gh`
 and Python 3.9 or later) and how to set your review style.
 
-So that the skill doesn't publish each page as an Artifact, tell it you read reviews here: copy
-`plugin/skills/story-review/references/default-style.md` to `~/.claude/story-reviews/style.md` and
-set its `## Reading` section to:
+So that the skill doesn't publish each page as an Artifact, tell it you read reviews here. Start
+your own style from the default one:
+
+```sh
+mkdir -p ~/.claude/story-reviews
+curl -fsSL https://raw.githubusercontent.com/nicholasm185/vscode-story-review/main/plugin/skills/story-review/references/default-style.md \
+  -o ~/.claude/story-reviews/style.md
+```
+
+Then set its `## Reading` section to:
 
 ```markdown
 ## Reading
