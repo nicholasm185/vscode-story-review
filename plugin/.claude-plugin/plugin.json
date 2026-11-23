@@ -1,0 +1,13 @@
+{
+  "name": "story-review",
+  "version": "1.2.0",
+  "description": "Review a GitHub pull request as a story-order page: chapters in reading order, diffs rendered from git, walkthroughs of the hard code beside the lines, findings pinned to their lines with copy-as-PR-comment, and a file tree with Viewed boxes. Your own style file decides what the review checks and how it reads.",
+  "author": {
+    "name": "nicholasm185",
+    "url": "https://github.com/nicholasm185"
+  },
+  "homepage": "https://github.com/nicholasm185/vscode-story-review",
+  "repository": "https://github.com/nicholasm185/vscode-story-review",
+  "license": "MIT",
+  "keywords": ["code-review", "pull-request", "github", "vscode"]
+}

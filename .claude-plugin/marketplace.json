@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "story-review",
+  "description": "The story-review skill for Claude Code, which builds the review pages the Story Review VS Code extension opens.",
+  "owner": {
+    "name": "nicholasm185",
+    "url": "https://github.com/nicholasm185"
+  },
+  "plugins": [
+    {
+      "name": "story-review",
+      "description": "Review a GitHub pull request as a story-order page: chapters in reading order, diffs rendered from git, walkthroughs beside the code, findings pinned to their lines with copy-as-PR-comment, and a file tree with Viewed boxes.",
+      "source": "./plugin",
+      "category": "development"
+    }
+  ]
+}

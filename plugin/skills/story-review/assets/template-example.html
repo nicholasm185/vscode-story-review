@@ -1,0 +1,109 @@
+<title>PR #1234 Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<!--@style-->
+
+<div class="page">
+<nav class="rail" aria-label="Chapters">
+  <!--@toc-->
+  <!--@findings-->
+  <!--@files-->
+  <h2>Stack</h2>
+  <div class="prev"><a href="https://claude.ai/artifact/PREVIOUS">← Review of #1233</a></div>
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow"><span>owner/repo</span><span>Pull request #1234</span><span>Area · work item</span><span>Reviewed 1 Jan 2027</span></div>
+  <h1>What the PR does, as a plain sentence</h1>
+  <p class="prtitle">feat(scope): the PR's exact title</p>
+  <div class="stack" aria-label="Stack">
+    <span class="lbl">Stack</span>
+    <span class="node">main</span><span class="arrow">←</span>
+    <a class="node" href="https://claude.ai/artifact/PREVIOUS">#1233</a><span class="arrow">←</span>
+    <span class="node here">#1234 this PR</span><span class="arrow">←</span>
+    <span class="node">#1235</span>
+  </div>
+  <!--@meta-->
+</header>
+
+<!-- Optional: an explainer for a PR whose behavior change needs a picture. Delete it otherwise. -->
+<section class="explain" id="how" aria-labelledby="how-h">
+  <h2 id="how-h">How it works after this PR</h2>
+  <p class="lede">One sentence on what changes in the flow, and what doesn't.</p>
+<!--@flow caption="What the picture shows, in one or two sentences."-->
+box chip: The request | campaign C, zone z-1
+-> reads
+box: The step before | unchanged
+=> new in this PR
+box hot: The changed step | what it decides now
+  refused -> box blocked: C doesn't bid | why, with the decision ID
+-> allowed
+box open: The result | `counterKey` set
+<!--@end-->
+  <h3>What changes, case by case</h3>
+  <table class="combos">
+    <thead><tr><th>Case</th><th>Before</th><th>After</th></tr></thead>
+    <tbody><tr><td>A concrete input.</td><td>The old result.</td><td>The new result.</td></tr></tbody>
+  </table>
+</section>
+
+<section class="verdict" aria-labelledby="verdict-h">
+  <div class="label">Verdict</div>
+  <h2 id="verdict-h">Approve after one change</h2>
+  <p>Two or three sentences: what the code does against its intent, and what to change before merge. Backticks like `this` become code.</p>
+  <!--@findings-table-->
+</section>
+
+<section class="checked" aria-labelledby="checked-h">
+  <h2 id="checked-h">Checked and fine</h2>
+  <ul>
+    <li><span>Topic. What you verified and how.</span></li>
+    <li class="no"><span>Not confirmed: what you could not check, and why.</span></li>
+  </ul>
+</section>
+
+<section class="chapter" id="ch1">
+  <h2>Why the design changed</h2>
+  <p class="lede">One sentence that tells the reader what this chapter changes.</p>
+  <p>Notes for the diffs right below. They stick beside those diffs on wide screens.</p>
+  <!--@diff file="docs/adr/0001-example.md" hunks="all"-->
+</section>
+
+<section class="chapter" id="ch2">
+  <h2>The core rule</h2>
+  <p class="lede">One sentence.</p>
+  <p><b>The idea.</b> Two or three sentences. <b>The example.</b> The named values the walkthrough traces.</p>
+  <!--@diff file="pkg/rule.go" hunks="0,2" walk="rule"-->
+<!--@walk rule-->
+<!--@step at="func Pick(" to="+2"-->
+<p>What these lines do, in a plain sentence. What the example holds here. Why, if the code doesn't show it.</p>
+<!--@step at="for _, g := range groups {" to="return best"-->
+<p>A loop, pass by pass:</p>
+<table class="trace"><thead><tr><th>Pass</th><th>Item</th><th>Best so far</th></tr></thead>
+<tbody><tr><td>1</td><td>a</td><td>a</td></tr><tr class="pick"><td>2</td><td>b</td><td>b</td></tr></tbody></table>
+<!--@end-->
+<!--@finding f1 sev="med" cat="Design" short="Short label for the sidebar" at="if g.spend &gt;= g.cap"-->
+<h4>The finding's title, as a claim</h4>
+<p>What is wrong, with `file.go:20` references.</p>
+<!--@scenario-->
+<p>Concrete inputs or state, and the wrong result.</p>
+<!--@fix-->
+<p>The change.</p>
+<pre class="sugg">// optional code sketch; backticks here stay as written</pre>
+<!--@end-->
+  <div class="note"><span class="tag ok">Checked</span><div><p>Something verified that a reader would otherwise wonder about.</p></div></div>
+  <p>Notes for the next group of diffs start a new step.</p>
+  <!--@context file="pkg/other.go" from="func Other(" to="+12" note="unchanged: why this code matters"-->
+  <details class="more">
+    <summary>The {n} routine hunks in rule.go and rule_test.go</summary>
+    <!--@diff file="pkg/rule.go" hunks="1"-->
+    <!--@diff file="pkg/rule_test.go" hunks="all"-->
+  </details>
+</section>
+</main>
+</div>
+
+<!--@script key="pr1234"-->

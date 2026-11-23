@@ -19,6 +19,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: The fixture page matches the bundled skill
+        run: npm run fixture && git diff --exit-code test/fixture/review
       - run: npm test
       - run: npm run package
       - uses: actions/upload-artifact@v4

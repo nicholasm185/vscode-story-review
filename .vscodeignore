@@ -9,3 +9,5 @@ tsconfig.json
 package-lock.json
 .gitignore
 *.vsix
+plugin/**
+.claude-plugin/**

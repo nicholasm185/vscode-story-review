@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The `story-review` skill now lives in this repository under `plugin/`, and the repository is a
+  Claude Code plugin marketplace, so anyone can install the skill with
+  `/plugin marketplace add nicholasm185/vscode-story-review`. `npm run fixture` builds with that
+  copy, and CI fails when the committed fixture page no longer matches it.
+
 ## 0.4.3
 
 - Closing a review by accident no longer means picking it again. The Story Review view offers

@@ -1,11 +1,10 @@
 // Fixed commit author and date, so a rebuild with the same skill version gives the same page.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 const here = path.dirname(new URL(import.meta.url).pathname);
-const skill = process.argv[2] || process.env.STORY_REVIEW_SKILL || path.join(os.homedir(), ".claude", "skills", "story-review");
+const skill = process.argv[2] || process.env.STORY_REVIEW_SKILL || path.join(here, "..", "..", "plugin", "skills", "story-review");
 const build = path.join(skill, "scripts", "build.py");
 if (!fs.existsSync(build)) {
   console.error(`No story-review skill at ${skill}. Pass its folder, or set STORY_REVIEW_SKILL.`);

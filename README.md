@@ -5,8 +5,8 @@ chapters, walkthroughs and Viewed boxes, and the code on it gets your editor's l
 hover a name for its type and docs, ⌘-click to go to its definition, ⇧⌘-click to find references.
 
 The pages come from the `story-review` skill for Claude Code. This extension doesn't write reviews;
-it opens the ones the skill builds. In Claude Code, install the skill with
-`/plugin install story-review@claudeai-organization-library` if your organization publishes it.
+it opens the ones the skill builds. The skill ships in this repository: see
+[Get the skill](#get-the-skill).
 
 ## What you get
 
@@ -41,11 +41,37 @@ On the machine where your code lives (for Remote-SSH or WSL, that's the remote m
 | GitHub CLI (`gh`), signed in with `gh auth login` and the `repo` scope | Checks out the pull request and syncs Viewed marks. |
 | A checkout of the repository the review is for | The language features read its files. Any remote may point at the repository, so a fork with an `upstream` remote works. |
 | The language extension for the code, such as Go with `gopls` | Hover and definitions come from it. |
-| Reviews built by the `story-review` skill, version 1.1 or later | The extension reads the page's markup. Tested with 1.2. |
+| Reviews built by the `story-review` skill, version 1.1 or later | The extension reads the page's markup. This repository's `plugin/` holds the version it's tested with. |
 | Node.js 20 or later, to build | Only for building the package. Tested with Node 24 on Linux; building on Windows itself is untried. |
 
 The extension also uses two extensions that ship with VS Code: Markdown Language Features (renders
 hover text) and Reference Search View (lists references). Leave them enabled.
+
+## Get the skill
+
+This repository is also a Claude Code plugin marketplace that carries the `story-review` skill. In
+Claude Code, on the machine where Claude runs:
+
+```
+/plugin marketplace add nicholasm185/vscode-story-review
+/plugin install story-review@story-review
+```
+
+Update it later with `/plugin marketplace update story-review`. To use the skill without the
+plugin system, copy `plugin/skills/story-review` into `~/.claude/skills/` instead; install it one
+way, not both. [plugin/README.md](plugin/README.md) lists the skill's own requirements (`git`, `gh`
+and Python 3.9 or later) and how to set your review style.
+
+So that the skill doesn't publish each page as an Artifact, tell it you read reviews here: copy
+`plugin/skills/story-review/references/default-style.md` to `~/.claude/story-reviews/style.md` and
+set its `## Reading` section to:
+
+```markdown
+## Reading
+
+I read reviews in the Story Review VS Code extension. Don't publish the page unless I ask; tell me
+to open it with **Story Review: Open Review**.
+```
 
 ## Install
 
@@ -158,9 +184,10 @@ for VS Code records the messages the scripts send, and the test checks them. Set
 the browser, and `SHOTS=1` to write screenshots to `test-out/`. The extension host side (language
 features, checkout, GitHub calls) has no automated test; try it in VS Code.
 
-`npm run fixture` rebuilds `test/fixture/review/page.html` with the `story-review` skill, from
-`~/.claude/skills/story-review` or the folder in `STORY_REVIEW_SKILL`. Rebuild it after the skill's
-page format changes, run the test, and commit the new page.
+`npm run fixture` rebuilds `test/fixture/review/page.html` with the skill in
+`plugin/skills/story-review`, or the folder in `STORY_REVIEW_SKILL`. Rebuild it after changing the
+skill's page format, run the test, and commit the new page. CI rebuilds it too and fails when the
+committed page differs, so the extension's test always runs against what the skill builds.
 
 Every push runs `.github/workflows/build.yml`, which runs the test and packages the extension. A
 `v*` tag also attaches the `.vsix` to a GitHub release, and a push to `main` keeps it as a workflow
@@ -180,6 +207,9 @@ artifact.
   maps a pointer on the diff to a file position, paints code colours as CSS highlights (the page's
   markup is never changed), and reports the page's outline, current chapter and notes.
 - `media/notes.js`: runs in the Notes view.
+- `plugin/`: the `story-review` skill as a Claude Code plugin, listed by
+  `.claude-plugin/marketplace.json`. `plugin/skills/story-review/references/maintaining.md` covers
+  changing its format and releasing it. It isn't part of the `.vsix`.
 
 ### The page contract
 
