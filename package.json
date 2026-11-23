@@ -3,7 +3,7 @@
   "displayName": "Story Review",
   "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
   "publisher": "local",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "license": "MIT",
   "private": true,
   "engines": {

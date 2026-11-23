@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.4
 
 - The `story-review` skill now lives in this repository under `plugin/`, and the repository is a
   Claude Code plugin marketplace, so anyone can install the skill with
