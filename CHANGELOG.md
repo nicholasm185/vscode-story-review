@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Code on the page takes the colours of your VS Code theme. Every line is tokenized from the whole
+  file at the base or head commit, using the same TextMate grammars as the editor, and added and
+  unchanged lines also get the language server's semantic colours. Colours are CSS highlights, so
+  hover, definitions and the page's word marks are unchanged.
+- About 65 themes are bundled, including Dark Modern, Light Modern, GitHub, One Dark Pro, Monokai,
+  Solarized, Dracula and Catppuccin. Others fall back to Dark Modern or Light Modern.
+- The extension is now bundled with esbuild into one file.
+
 ## 0.3.4
 
 - The test starts Chrome reliably in CI: it prefers Google Chrome over the `chromium` snap wrapper,

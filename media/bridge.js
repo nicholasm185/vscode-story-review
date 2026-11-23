@@ -322,7 +322,9 @@
 
   window.addEventListener("message", (ev) => {
     const m = ev.data || {};
-    if (m.type === "syncViewed") {
+    if (m.type === "paint") {
+      onPaint(m);
+    } else if (m.type === "syncViewed") {
       applyViewed(m.viewed, m.listed || m.viewed);
     } else if (m.type === "layout") {
       const root = document.documentElement;
@@ -354,6 +356,102 @@
     }
   });
 
+  // Code colours arrive from the extension and paint as CSS highlights, so the page's text and spans stay as built.
+  const paints = {};
+  const tmHighlights = [];
+  let painted = new WeakMap();
+  let tmStyle;
+
+  function sideOf(td) {
+    const tr = td.parentElement;
+    if (tr.closest("table.sp")) {
+      const ln = td.previousElementSibling && td.previousElementSibling.previousElementSibling;
+      const n = ln && ln.classList.contains("ln") ? parseInt(ln.textContent, 10) : NaN;
+      return n ? { side: ln.classList.contains("nl") ? "new" : "old", line: n } : null;
+    }
+    const oldN = tr.cells[0] && parseInt(tr.cells[0].textContent, 10);
+    const newN = tr.cells[1] && parseInt(tr.cells[1].textContent, 10);
+    if (!tr.classList.contains("del") && newN) return { side: "new", line: newN };
+    return oldN ? { side: "old", line: oldN } : null;
+  }
+
+  function fileOf(td) {
+    const f = td.closest("[data-file]");
+    return f && f.getAttribute("data-file");
+  }
+
+  function unpaint(td) {
+    const done = painted.get(td);
+    if (done) done.forEach(([hl, r]) => hl.delete(r));
+    painted.delete(td);
+    td.classList.remove("sr-tm");
+  }
+
+  function paintCell(td) {
+    if (!window.CSS || !CSS.highlights) return;
+    const file = fileOf(td), pos = file && paints[file] && sideOf(td);
+    const entry = pos && paints[file][pos.side] && paints[file][pos.side][pos.line];
+    unpaint(td);
+    if (!entry || codeText(td) !== entry[0]) return;
+    const done = [];
+    for (const [s, e, c] of entry[1]) {
+      const r = rangeFor(td, s, e), hl = tmHighlights[c];
+      if (r && hl) { hl.add(r); done.push([hl, r]); }
+    }
+    painted.set(td, done);
+    td.classList.add("sr-tm");
+  }
+
+  function setColors(colors) {
+    if (!window.CSS || !CSS.highlights) return;
+    for (let i = tmHighlights.length; i < colors.length; i++) {
+      tmHighlights[i] = new Highlight();
+      CSS.highlights.set("sr-tm-" + i, tmHighlights[i]);
+    }
+    tmStyle = tmStyle || document.head.appendChild(document.createElement("style"));
+    tmStyle.textContent = colors.map((c, i) => /^#[0-9a-f]{3,8}$/i.test(c) ? "::highlight(sr-tm-" + i + ") { color: " + c + "; }" : "").join("\n");
+  }
+
+  function requestPaint() {
+    for (const k of Object.keys(paints)) delete paints[k];
+    document.querySelectorAll("table.diff td.code").forEach(unpaint);
+    painted = new WeakMap();
+    const files = {};
+    document.querySelectorAll("table.diff td.code").forEach((td) => {
+      const file = fileOf(td), pos = file && sideOf(td);
+      if (!pos) return;
+      const f = files[file] || (files[file] = { old: [], new: [] });
+      const add = (side, n) => { if (n && !f[side].includes(n)) f[side].push(n); };
+      add(pos.side, pos.line);
+      // Split view, built later, shows an unchanged line on the old side under its old number.
+      const tr = td.parentElement;
+      if (!tr.closest("table.sp") && tr.classList.contains("ctx")) add("old", parseInt(tr.cells[0].textContent, 10));
+    });
+    const b = document.body.dataset;
+    vscode.postMessage({ type: "paint", theme: { name: b.vscodeThemeId || b.vscodeThemeName || "", kind: b.vscodeThemeKind || "" }, files });
+  }
+
+  function onPaint(m) {
+    setColors(m.colors || []);
+    for (const [file, sides] of Object.entries(m.files || {})) {
+      const p = paints[file] || (paints[file] = {});
+      Object.assign(p, sides);
+      document.querySelectorAll("[data-file]").forEach((el) => {
+        if (el.getAttribute("data-file") === file) el.querySelectorAll("table.diff td.code").forEach(paintCell);
+      });
+    }
+  }
+
+  function paintAdded(records) {
+    for (const rec of records) {
+      rec.addedNodes.forEach((n) => {
+        if (n.nodeType !== 1) return;
+        if (n.matches("table.diff td.code")) paintCell(n);
+        else n.querySelectorAll("table.diff td.code").forEach(paintCell);
+      });
+    }
+  }
+
   function initSides() {
     sendOutline();
     document.addEventListener("change", sendOutline, true);
@@ -375,6 +473,7 @@
     });
     queueNotes();
     vscode.postMessage({ type: "ready" });
+    requestPaint();
   }
 
   // The page's contents column never shows in VS Code, so its "c" key would only toggle something invisible.
@@ -387,6 +486,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     followTheme();
     new MutationObserver(followTheme).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    new MutationObserver(requestPaint).observe(document.body, { attributes: true, attributeFilter: ["data-vscode-theme-id", "data-vscode-theme-name"] });
+    new MutationObserver(paintAdded).observe(document.body, { childList: true, subtree: true });
     tip = document.createElement("div");
     tip.className = "sr-tip";
     tip.hidden = true;

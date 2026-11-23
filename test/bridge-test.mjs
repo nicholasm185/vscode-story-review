@@ -105,6 +105,28 @@ const click = async (x, y, modifiers = 0) => {
   await sleep(200);
 };
 
+// Code colours: the page asks for its lines, paints what the extension sends, and leaves the DOM as built.
+const cellFor = (split, n) => `(() => {
+  const want = "${n}";
+  for (const f of document.querySelectorAll('[data-file="${FILE}"]')) {
+    if (${split}) { const ln = [...f.querySelectorAll("table.sp td.ln.nl")].find(x => x.textContent.trim() === want); if (ln) return ln.nextElementSibling.nextElementSibling; }
+    else { const tr = [...f.querySelectorAll("table.diff:not(.sp) tr")].find(x => x.cells[1]?.textContent.trim() === want); if (tr) return tr.cells[3]; }
+  }
+  return null;
+})()`;
+const askPaint = await lastMsg("paint");
+check("the page asks for colours for its diff lines", !!askPaint?.files?.[FILE]?.new?.includes(LINE), JSON.stringify(askPaint?.files?.[FILE] ?? null).slice(0, 120));
+const OTHER = askPaint?.files?.[FILE]?.new?.find((n) => n !== LINE);
+const lineText = headLines[LINE - 1];
+const before = await js(`${cellFor(false, LINE)}.innerHTML`);
+await js(`window.postMessage(${JSON.stringify({ type: "paint", colors: ["#ff0000", "#00ff00"], files: { [FILE]: { new: { [LINE]: [lineText, [[0, 3, 0], [3, lineText.length, 1]]], [OTHER]: ["not the line", [[0, 2, 0]]] } } } })}, "*")`);
+await sleep(200);
+const painted = await js(`(() => { const td = ${cellFor(false, LINE)}, other = ${cellFor(false, OTHER)};
+  return { on: td.classList.contains("sr-tm"), same: td.innerHTML === ${JSON.stringify(before)},
+    hl: CSS.highlights.get("sr-tm-0")?.size || 0, other: other.classList.contains("sr-tm"), css: [...document.querySelectorAll("style")].some(s => s.textContent.includes("::highlight(sr-tm-1) { color: #00ff00; }")) }; })()`);
+check("a sent line paints as highlights without changing the cell", painted?.on && painted.same && painted.hl > 0 && painted.css, JSON.stringify(painted));
+check("a line whose text differs stays unpainted", painted?.other === false);
+
 for (const split of [false, true]) {
   const view = split ? "split" : "unified";
   if (split) {
@@ -112,6 +134,9 @@ for (const split of [false, true]) {
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "s" });
     await sleep(500);
     check("split view built", await js(`document.querySelectorAll("table.diff.sp").length > 0 && !!document.querySelector("table.sp")?.offsetParent`));
+    check("split view cells are painted too", await js(`${cellFor(true, LINE)}?.classList.contains("sr-tm")`));
+    const oldCtx = await js(`(() => { const tr = [...document.querySelectorAll('[data-file="${FILE}"] table.diff:not(.sp) tr.ctx')].find(x => x.cells[0].textContent.trim()); return tr && +tr.cells[0].textContent; })()`);
+    check("unchanged lines are asked for on the old side too, for split view", !!oldCtx && askPaint.files[FILE].old.includes(oldCtx), `${oldCtx} in ${JSON.stringify(askPaint.files[FILE].old)}`);
   }
   await locate(split);
   await sleep(400);
@@ -252,6 +277,11 @@ await send("Input.dispatchKeyEvent", { type: "keyUp", key: "v" });
 await sleep(300);
 const vkey = await lastMsg("viewedChange");
 check("the v key's tick is sent to GitHub too", vkey && vkey.path, JSON.stringify(vkey));
+
+await js(`window.__msgs.length = 0; document.body.dataset.vscodeThemeId = "Monokai"`);
+await sleep(200);
+const reask = await lastMsg("paint");
+check("a theme change asks for colours again and clears the old ones", reask?.theme?.name === "Monokai" && await js(`!document.querySelector("td.sr-tm") && (CSS.highlights.get("sr-tm-0")?.size || 0) === 0`), JSON.stringify(reask?.theme));
 
 // The Notes view itself, fed one notes message.
 const notesHtml = `<!doctype html><html><head><meta charset="utf-8"><style>${(page.match(/<style>([\s\S]*?)<\/style>/) || [])[1]}</style>` +

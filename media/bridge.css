@@ -21,3 +21,4 @@ main { max-width: none !important; }
 :root.sr-no-notes .step:not(.solo) > .step-notes { display: none; }
 .file-h .path.sr-open { cursor: pointer; }
 .file-h .path.sr-open:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+td.sr-tm .kw, td.sr-tm .st, td.sr-tm .cm { color: inherit; font-style: normal; }

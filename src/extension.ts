@@ -6,9 +6,27 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { randomBytes } from "crypto";
 import { Hub, Outline, PanelLink } from "./views";
+import { Run, Tokenizer, langOf, overlay, semanticColor, semanticOn, themeIdFor } from "./tokens";
 
 const run = promisify(execFile);
 const PENDING = "storyReview.pending";
+const tokenizer = new Tokenizer();
+let channel: vscode.OutputChannel | undefined;
+const log = (line: string) => (channel ??= vscode.window.createOutputChannel("Story Review")).appendLine(line);
+
+type Side = "old" | "new";
+interface PaintRequest {
+  theme?: { name?: string; kind?: string };
+  files: Record<string, Partial<Record<Side, number[]>>>;
+}
+
+function configuredTheme(dark: boolean): string | undefined {
+  const w = vscode.workspace.getConfiguration("workbench");
+  if (vscode.workspace.getConfiguration("window").get<boolean>("autoDetectColorScheme")) {
+    return w.get<string>(dark ? "preferredDarkColorTheme" : "preferredLightColorTheme");
+  }
+  return w.get<string>("colorTheme");
+}
 
 interface Meta {
   repo: string;
@@ -185,6 +203,8 @@ class ReviewPanel implements PanelLink {
   private readonly ticks = new Map<string, { on: boolean; at: number }>();
   private readonly queue = new Map<string, boolean>();
   private files: Outline["files"] = [];
+  private paintSeq = 0;
+  private readonly blobs = new Map<string, Promise<string | undefined>>();
 
   static show(ctx: vscode.ExtensionContext, hub: Hub, review: Review, wt: string): void {
     const open = ReviewPanel.panels.get(review.dir);
@@ -207,8 +227,10 @@ class ReviewPanel implements PanelLink {
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
     });
-    // A hover fires on every pause of the mouse, so its failures stay quiet; clicks report theirs.
-    this.panel.webview.onDidReceiveMessage((m) => this.onMessage(m).catch((e) => (m.type === "hover" ? undefined : this.fail(e))));
+    // A hover fires on every pause of the mouse, and code colours are optional, so their failures stay quiet; clicks report theirs.
+    this.panel.webview.onDidReceiveMessage((m) =>
+      this.onMessage(m).catch((e) => (m.type === "hover" ? undefined : m.type === "paint" ? log(`Colouring failed: ${errText(e)}`) : this.fail(e))),
+    );
     this.panel.onDidDispose(() => {
       this.watcher.dispose();
       ReviewPanel.panels.delete(review.dir);
@@ -379,6 +401,9 @@ class ReviewPanel implements PanelLink {
         await this.ctx.globalState.update(this.stateKey, state);
         return;
       }
+      case "paint":
+        await this.paint(m as PaintRequest);
+        return;
       case "hover": {
         const uri = this.uri(m.path);
         await vscode.workspace.openTextDocument(uri);
@@ -436,6 +461,124 @@ class ReviewPanel implements PanelLink {
         return;
       }
     }
+  }
+
+  private blob(sha: string, file: string): Promise<string | undefined> {
+    const key = `${sha}:${file}`;
+    let b = this.blobs.get(key);
+    if (!b) {
+      b = git(this.wt, "show", key).catch(() => undefined);
+      this.blobs.set(key, b);
+    }
+    return b;
+  }
+
+  // Colours each requested line the way the editor would: TextMate first, then the language server's semantic tokens.
+  private async paint(m: PaintRequest): Promise<void> {
+    const seq = ++this.paintSeq;
+    const kind = vscode.window.activeColorTheme.kind;
+    const dark = m.theme?.kind ? !/light/.test(m.theme.kind) : kind === vscode.ColorThemeKind.Dark || kind === vscode.ColorThemeKind.HighContrast;
+    const label = m.theme?.name || configuredTheme(dark);
+    const pick = themeIdFor(label, dark);
+    log(`Code colours: theme "${label ?? "(unset)"}" → ${pick.id}${pick.matched ? "" : " (not bundled, so the default for its kind)"}.`);
+    const theme = await tokenizer.theme(pick.id);
+    const { base, head } = this.review.meta;
+    const tm = new Map<string, { src: string[]; runs: Run[][] }>();
+    for (const [file, want] of Object.entries(m.files)) {
+      const lang = langOf(file);
+      if (!lang) continue;
+      const out: Partial<Record<Side, Record<number, [string, Run[]]>>> = {};
+      for (const side of ["old", "new"] as const) {
+        const lines = want[side];
+        if (!lines?.length) continue;
+        const text = await this.blob(side === "old" ? base : head, file);
+        if (text === undefined || text.length > 2_000_000) continue;
+        const src = text.split(/\r?\n/);
+        const runs = await tokenizer.lines(text, lang, theme);
+        if (seq !== this.paintSeq) return;
+        if (side === "new") tm.set(file, { src, runs });
+        out[side] = Object.fromEntries(lines.filter((n) => n >= 1 && n <= src.length).map((n) => [n, [src[n - 1], runs[n - 1] ?? []]]));
+      }
+      this.post({ type: "paint", colors: tokenizer.colors, files: { [file]: out } });
+      await new Promise((r) => setImmediate(r));
+    }
+    if (!semanticOn(theme.resolved, vscode.workspace.getConfiguration("editor").get("semanticHighlighting.enabled"))) {
+      log("Code colours: semantic highlighting is off for this theme or in editor.semanticHighlighting.enabled.");
+      return;
+    }
+    const silent = await this.semanticPass(seq, m, tm, theme.resolved);
+    if (!silent.size) return;
+    // A language server still loading a large workspace may answer later, so try those languages once more.
+    setTimeout(() => {
+      if (seq !== this.paintSeq) return;
+      const again = new Map([...tm].filter(([file]) => silent.has(langOf(file)!)));
+      void this.semanticPass(seq, m, again, theme.resolved).catch((e) => log(`Colouring failed: ${errText(e)}`));
+    }, 20000);
+  }
+
+  // Overlays semantic colours on each file's new side; returns the languages whose server didn't answer.
+  private async semanticPass(
+    seq: number,
+    m: PaintRequest,
+    tm: Map<string, { src: string[]; runs: Run[][] }>,
+    theme: Parameters<typeof semanticColor>[0],
+  ): Promise<Set<string>> {
+    const silent = new Set<string>();
+    const counts = new Map<string, number>();
+    for (const [file, { src, runs }] of tm) {
+      const lang = langOf(file)!;
+      if (silent.has(lang)) continue;
+      const spans = await this.semantic(file, src, theme);
+      if (seq !== this.paintSeq) return silent;
+      if (!spans) {
+        silent.add(lang);
+        continue;
+      }
+      counts.set(lang, (counts.get(lang) ?? 0) + [...spans.values()].reduce((a, l) => a + l.length, 0));
+      const lines = m.files[file].new ?? [];
+      const out = Object.fromEntries(
+        lines.filter((n) => n >= 1 && n <= src.length).map((n) => [n, [src[n - 1], overlay(runs[n - 1] ?? [], spans.get(n - 1) ?? [])]]),
+      );
+      this.post({ type: "paint", colors: tokenizer.colors, files: { [file]: { new: out } } });
+    }
+    const parts = [...counts].map(([l, n]) => `${l} ${n} tokens`).concat([...silent].map((l) => `${l} no answer`));
+    if (parts.length) log(`Code colours: semantic tokens: ${parts.join(", ")}.`);
+    return silent;
+  }
+
+  // Semantic spans per zero-based line, or undefined when no language server answers for this file's language.
+  private async semantic(file: string, src: string[], theme: Parameters<typeof semanticColor>[0]): Promise<Map<number, Run[]> | undefined> {
+    const uri = this.uri(file);
+    let doc: vscode.TextDocument;
+    try {
+      doc = await vscode.workspace.openTextDocument(uri);
+    } catch {
+      return new Map();
+    }
+    if (doc.getText().split(/\r?\n/).join("\n") !== src.join("\n")) return new Map();
+    let legend: vscode.SemanticTokensLegend | undefined, tokens: vscode.SemanticTokens | undefined;
+    // A language server that is still starting answers with nothing, so wait for it a few times.
+    for (let i = 0; i < 4 && !tokens?.data.length; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 1500 * i));
+      legend = await vscode.commands.executeCommand<vscode.SemanticTokensLegend>("vscode.provideDocumentSemanticTokensLegend", uri);
+      tokens = await vscode.commands.executeCommand<vscode.SemanticTokens>("vscode.provideDocumentSemanticTokens", uri);
+    }
+    if (!legend || !tokens?.data.length) return undefined;
+    const spans = new Map<number, Run[]>();
+    const d = tokens.data;
+    let line = 0, start = 0;
+    for (let i = 0; i + 4 < d.length; i += 5) {
+      line += d[i];
+      start = d[i] ? d[i + 1] : start + d[i + 1];
+      const type = legend.tokenTypes[d[i + 3]];
+      const mods = legend.tokenModifiers.filter((_, b) => d[i + 4] & (1 << b));
+      const fg = type && semanticColor(theme, type, mods);
+      if (!fg) continue;
+      const list = spans.get(line) ?? [];
+      list.push([start, start + d[i + 2], tokenizer.color(fg)]);
+      spans.set(line, list);
+    }
+    return spans;
   }
 
   private fail(e: unknown): void {

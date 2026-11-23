@@ -13,6 +13,9 @@ it opens the ones the skill builds. In Claude Code, install the skill with
 - **The review in an editor tab.** The page you'd publish, rendered in a panel.
 - **Language features on the diff.** Hover, go to definition (⌘ or Ctrl-click) and find references
   (⇧⌘ or ⇧Ctrl-click) work on added and unchanged lines. Removed lines have no file to ask about.
+- **Code coloured like your editor.** Diff lines take the colours of your VS Code theme, from the
+  same TextMate grammars the editor uses, plus the language server's semantic colours on added and
+  unchanged lines (functions, types, parameters, constants), as in an editor tab.
 - **Code beside the review.** Clicking a line number or a file name opens that file in an editor
   next to the panel. ⌥-click on a line number copies `path:line` instead.
 - **Contents in the side bar.** The Story Review view lists the chapters (with read marks), the
@@ -122,6 +125,13 @@ Files view, or with the page's `v` key writes the change back.
   points at the review's repository. Open the right checkout, or add the repository as a remote.
 - **Hover shows nothing.** Check that the language extension works in an ordinary editor tab first.
   Hover only works on added and unchanged lines.
+- **Code colours don't match your theme.** The extension carries its own copy of about 65 popular
+  themes, because the VS Code server can't see themes installed on your own machine. A theme it
+  doesn't carry falls back to Dark Modern or Light Modern; the Story Review output channel names
+  the fallback. Colours from `editor.tokenColorCustomizations` aren't applied.
+- **Some lines stay uncoloured.** Only these languages are coloured: Go, TypeScript, JavaScript
+  (and JSX), JSON, YAML, SQL, Python, CSS, SCSS, HTML, shell, Dockerfile, TOML, Makefile, Protocol
+  Buffers and HCL. A line is also left alone when its text differs from the commit in `meta.json`.
 - **Line numbers land on the wrong lines.** The checkout isn't at the reviewed commit. Open the
   review again and accept the checkout, or check out the commit in `meta.json`'s `head`.
 
@@ -129,11 +139,12 @@ Files view, or with the page's `v` key writes the change back.
 
 ```sh
 npm ci
-npm run watch          # compile on save
+npm run watch          # bundle on save (npm run build also type-checks)
 npm run release        # package and install in one step
 ```
 
-`npm test` runs the page-side scripts in headless Chrome or Chromium against a made-up review in
+`npm test` first checks the tokenizer (`src/tokens.ts`) in Node against Dark Modern's colours, then
+runs the page-side scripts in headless Chrome or Chromium against a made-up review in
 `test/fixture`: a small Go module and a pull request that adds discount codes to its cart. A stand-in
 for VS Code records the messages the scripts send, and the test checks them. Set `CHROME` to pick
 the browser, and `SHOTS=1` to write screenshots to `test-out/`. The extension host side (language
@@ -151,11 +162,14 @@ artifact.
 
 - `src/extension.ts`: the Open Review command, the checkout, the review panel, language features
   for the page, and the GitHub Viewed sync.
+- `src/tokens.ts`: code colours. It wraps Shiki (VS Code's TextMate grammars and themes), maps a VS
+  Code theme name to a bundled theme, and maps semantic tokens to colours with VS Code's own
+  fallback scopes. It doesn't import `vscode`, so it's tested in plain Node.
 - `src/views.ts`: the Chapters, Findings and Files trees, the Notes view, and the hub that passes
   messages between them and the panel.
 - `media/bridge.js`: runs in the review panel. It keeps the page's progress in extension storage,
-  maps a pointer on the diff to a file position, and reports the page's outline, current chapter
-  and notes.
+  maps a pointer on the diff to a file position, paints code colours as CSS highlights (the page's
+  markup is never changed), and reports the page's outline, current chapter and notes.
 - `media/notes.js`: runs in the Notes view.
 
 ### The page contract
@@ -163,8 +177,10 @@ artifact.
 The extension reads the markup the `story-review` skill writes. If the skill's format changes, keep
 these working or update `media/bridge.js`:
 
-- `[data-file]` on each file block, and `table.diff` rows with the new-side line number in the
-  second cell. In split view, the new-side line cell has the class `nl`.
+- `[data-file]` on each file block, and `table.diff` rows with the old-side line number in the first
+  cell, the new-side one in the second, and `tr.del` on removed lines. In split view, the line number
+  cell sits two cells before its code cell and has the class `nl` on the new side.
+- `td.code` text equal to the source line, plus an optional trailing `.wmark`.
 - `.file-h .path` for a file block's name.
 - `#toc > li` with `a .n`, `a .t` and `.dot.s-<severity>`, and `li.current` on the chapter in view.
 - `.seen-toggle input[data-ch]` for chapter read marks.
