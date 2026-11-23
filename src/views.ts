@@ -161,6 +161,7 @@ export class Hub {
   private readonly views: vscode.TreeView<Node>[] = [];
   private readonly notes: NotesView;
   private current?: string;
+  private last?: string;
 
   constructor(ctx: vscode.ExtensionContext) {
     this.trees = { chapters: new OutlineTree(this, "chapters"), findings: new OutlineTree(this, "findings"), files: new OutlineTree(this, "files") };
@@ -195,11 +196,18 @@ export class Hub {
     this.remote = p?.remote();
     if (!p) {
       this.outline = undefined;
+      this.views[0].description = this.last;
       this.refresh();
       this.notes.post({ type: "notes", html: "", title: "" });
     }
     this.notes.render();
     this.layout();
+  }
+
+  /** Names the review the side bar's Reopen button opens, while no review is open. */
+  setLast(text: string | undefined): void {
+    this.last = text;
+    if (!this.panel) this.views[0].description = text;
   }
 
   setOutline(from: PanelLink, o: Outline): void {

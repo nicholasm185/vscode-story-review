@@ -10,6 +10,7 @@ import { Run, Theme, Tokenizer, langOf, overlay, semanticColor, semanticOn, them
 
 const run = promisify(execFile);
 const PENDING = "storyReview.pending";
+const LAST = "storyReview.lastOpened";
 const tokenizer = new Tokenizer();
 let channel: vscode.OutputChannel | undefined;
 const log = (line: string) => (channel ??= vscode.window.createOutputChannel("Story Review")).appendLine(line);
@@ -262,6 +263,7 @@ class ReviewPanel implements PanelLink {
       this.onMessage(m).catch((e) => (m.type === "paint" ? log(`Colouring failed: ${errText(e)}`) : this.fail(e))),
     );
     this.panel.onDidDispose(() => {
+      void refreshLast(this.ctx);
       this.watcher.dispose();
       ReviewPanel.panels.delete(review.dir);
       if (hub.panel === this) hub.setPanel([...ReviewPanel.panels.values()].pop());
@@ -642,19 +644,58 @@ let hub: Hub;
 
 async function openReview(ctx: vscode.ExtensionContext, review: Review): Promise<void> {
   const wt = await ensureCheckout(ctx, review);
-  if (wt) ReviewPanel.show(ctx, hub, review, wt);
+  if (!wt) return;
+  ReviewPanel.show(ctx, hub, review, wt);
+  await rememberOpened(ctx, wt, review).catch((e) => log(`Couldn't remember the review for this branch: ${errText(e)}`));
 }
 
-async function pickReview(): Promise<Review | undefined> {
+// A worktree and the branch checked out in it, or the commit when detached.
+async function placeOf(wt: string): Promise<{ key: string; label: string }> {
+  const branch = (await git(wt, "branch", "--show-current")).trim();
+  const at = branch || "@" + (await git(wt, "rev-parse", "HEAD")).trim();
+  return { key: `${wt}\n${at}`, label: branch || `detached ${at.slice(1, 10)}` };
+}
+
+async function rememberOpened(ctx: vscode.ExtensionContext, wt: string, review: Review): Promise<void> {
+  const { key } = await placeOf(wt);
+  const all = { ...ctx.globalState.get<Record<string, string>>(LAST, {}) };
+  delete all[key];
+  all[key] = review.dir;
+  const keep = Object.entries(all).slice(-100);
+  await ctx.globalState.update(LAST, Object.fromEntries(keep));
+}
+
+/** The review last opened on the branch now checked out in one of this window's folders. */
+async function lastHere(ctx: vscode.ExtensionContext): Promise<{ review: Review; branch: string } | undefined> {
+  const all = ctx.globalState.get<Record<string, string>>(LAST, {});
+  for (const f of vscode.workspace.workspaceFolders ?? []) {
+    if (f.uri.scheme !== "file") continue;
+    const place = await placeOf(f.uri.fsPath).catch(() => undefined);
+    const dir = place && all[place.key];
+    const review = dir ? listReviews().find((r) => r.dir === dir) : undefined;
+    if (review) return { review, branch: place!.label };
+  }
+  return undefined;
+}
+
+async function refreshLast(ctx: vscode.ExtensionContext): Promise<void> {
+  const last = await lastHere(ctx);
+  await vscode.commands.executeCommand("setContext", "storyReview.lastHere", !!last);
+  hub.setLast(last && `#${last.review.meta.pr} last opened on ${last.branch}`);
+}
+
+async function pickReview(ctx: vscode.ExtensionContext): Promise<Review | undefined> {
   const reviews = listReviews();
   if (!reviews.length) {
     void vscode.window.showInformationMessage(`No built reviews under ${reviewsRoot()}.`);
     return undefined;
   }
+  const last = await lastHere(ctx);
+  const first = last ? [last.review, ...reviews.filter((r) => r.dir !== last.review.dir)] : reviews;
   const item = await vscode.window.showQuickPick(
-    reviews.map((r) => ({
+    first.map((r) => ({
       label: `#${r.meta.pr}`,
-      description: r.meta.verdict ?? "",
+      description: [r.meta.verdict, r === last?.review ? `last opened on ${last.branch}` : ""].filter(Boolean).join(" · "),
       detail: `${r.meta.repo} · head ${r.meta.head.slice(0, 9)} · reviewed ${r.meta.reviewed ?? "?"}`,
       r,
     })),
@@ -667,10 +708,19 @@ export function activate(ctx: vscode.ExtensionContext): void {
   hub = new Hub(ctx);
   ctx.subscriptions.push(
     vscode.commands.registerCommand("storyReview.open", async () => {
-      const r = await pickReview();
+      const r = await pickReview(ctx);
       if (r) await openReview(ctx, r);
     }),
+    vscode.commands.registerCommand("storyReview.reopen", async () => {
+      const r = (await lastHere(ctx))?.review ?? (await pickReview(ctx));
+      if (r) await openReview(ctx, r);
+    }),
+    // Switching branches changes which review is the last one here; a check on focus is cheap and catches it.
+    vscode.window.onDidChangeWindowState((s) => {
+      if (s.focused && !hub.panel) void refreshLast(ctx);
+    }),
   );
+  void refreshLast(ctx);
   const pending = ctx.globalState.get<string>(PENDING);
   if (pending) {
     void ctx.globalState.update(PENDING, undefined);

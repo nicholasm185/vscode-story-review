@@ -93,6 +93,9 @@ After installing, run **Developer: Reload Window**.
 4. If the pull request has commits after the reviewed one, the extension tells you, and offers to
    check out the reviewed commit so the page's lines match the files.
 
+If you close the review, the Story Review view offers **Reopen Last Review**: the review you last
+opened on the branch that's checked out now. Open Review also lists that review first.
+
 The first hover in a session can take a few seconds while the language server loads the workspace.
 
 ## Viewed marks and GitHub

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3
+
+- Closing a review by accident no longer means picking it again. The Story Review view offers
+  **Reopen Last Review** for the review last opened on the branch now checked out, and names it in
+  the Chapters header. Open Review lists that review first. A detached checkout is remembered by
+  its commit.
+
 ## 0.4.2
 
 - Hovers come sooner. The page asks the language server as soon as the pointer settles on a name,
