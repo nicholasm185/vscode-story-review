@@ -3,15 +3,25 @@ body { padding: 0; }
 code { color: inherit; }
 .sr-mod table.diff td.code { cursor: pointer; }
 ::highlight(sr-word) { text-decoration: underline; text-decoration-color: var(--accent, currentColor); text-decoration-thickness: 2px; background-color: color-mix(in srgb, var(--accent, #5b8def) 14%, transparent); }
-.sr-tip { position: fixed; z-index: 50; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line, #444);
-  background: var(--surface, #1e1e1e); color: var(--fg, inherit); box-shadow: 0 6px 24px rgb(0 0 0 / .25);
-  font: 13px/1.5 var(--sans, sans-serif); max-height: 50vh; overflow: auto; }
-.sr-tip p { margin: 0 0 6px; }
-.sr-tip p:last-child { margin-bottom: 0; }
-.sr-tip pre { margin: 0 0 6px; padding: 6px 8px; border-radius: 6px; background: var(--sunken, transparent); font: 12px/1.5 var(--mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
-.sr-tip code { font-family: var(--mono, monospace); font-size: 12px; }
-.sr-tip hr { border: 0; border-top: 1px solid var(--line, #444); margin: 8px 0; }
-.sr-tip a { color: var(--accent, inherit); }
+/* VS Code's editor hover: its theme colours, fonts and row borders. */
+.sr-tip { position: fixed; z-index: 50; box-sizing: border-box; max-width: min(500px, calc(100vw - 16px)); max-height: max(250px, 33vh); overflow: auto;
+  background: var(--vscode-editorHoverWidget-background, #252526); color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+  border: 1px solid var(--vscode-editorHoverWidget-border, #454545); border-radius: 3px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgb(0 0 0 / .36));
+  font-family: var(--vscode-font-family, system-ui, sans-serif); font-size: var(--vscode-font-size, 13px); font-weight: normal; line-height: 1.5;
+  overflow-wrap: break-word; animation: sr-tip-in 100ms linear; }
+@keyframes sr-tip-in { from { opacity: 0; } }
+.sr-tip-row { padding: 4px 8px; }
+.sr-tip-row + .sr-tip-row { border-top: 1px solid var(--vscode-editorHoverWidget-border, #454545); }
+.sr-tip p, .sr-tip ul, .sr-tip ol, .sr-tip pre { margin: 8px 0; }
+.sr-tip-row > :first-child { margin-top: 0; }
+.sr-tip-row > :last-child { margin-bottom: 0; }
+.sr-tip ul, .sr-tip ol { padding-left: 20px; }
+.sr-tip pre { padding: 0; background: none; border: 0; white-space: pre-wrap; }
+.sr-tip code { font-family: var(--vscode-editor-font-family, monospace); font-size: var(--vscode-editor-font-size, 12px); background: none; padding: 0; border: 0; border-radius: 0; color: inherit; }
+.sr-tip hr { border: 0; border-top: 1px solid var(--vscode-editorHoverWidget-border, #454545); margin: 4px -8px; }
+.sr-tip a { color: var(--vscode-textLink-foreground, #3794ff); text-decoration: none; }
+.sr-tip a:hover { color: var(--vscode-textLink-activeForeground, #3794ff); text-decoration: underline; }
+.sr-tip h1, .sr-tip h2, .sr-tip h3, .sr-tip h4 { font-size: 1em; margin: 8px 0; }
 /* The Story Review side bar is the contents in VS Code. !important beats the page's saved "contents hidden" layout. */
 .rail { display: none !important; }
 .page { grid-template-columns: minmax(0, 1fr) !important; max-width: none !important; }

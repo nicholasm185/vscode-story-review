@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2
+
+- Hovers come sooner. The page asks the language server as soon as the pointer settles on a name,
+  then shows the card after `editor.hover.delay`, so the server's time overlaps the wait. Moving
+  within the same name no longer restarts the wait, and a name you've already hovered answers at
+  once until a file in the worktree changes.
+- The hover card looks like the editor's: VS Code's hover colours, fonts and row borders, code
+  coloured by your theme, and above the line unless `editor.hover.above` is off.
+- Each hover's time is logged to the Story Review output channel, split into opening the file,
+  the language server and rendering.
+
 ## 0.4.1
 
 - VS Code's own themes are bundled, so Dark 2026, Light 2026, Dark Modern, Dark+, the Visual Studio

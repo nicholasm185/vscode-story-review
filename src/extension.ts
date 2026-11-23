@@ -6,7 +6,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { randomBytes } from "crypto";
 import { Hub, Outline, PanelLink } from "./views";
-import { Run, Tokenizer, langOf, overlay, semanticColor, semanticOn, themeIdFor } from "./tokens";
+import { Run, Theme, Tokenizer, langOf, overlay, semanticColor, semanticOn, themeIdFor } from "./tokens";
 
 const run = promisify(execFile);
 const PENDING = "storyReview.pending";
@@ -174,16 +174,44 @@ function toLocation(l: vscode.Location | vscode.LocationLink): { uri: vscode.Uri
   return "targetUri" in l ? { uri: l.targetUri, range: l.targetSelectionRange ?? l.targetRange } : { uri: l.uri, range: l.range };
 }
 
-function hoverMarkdown(hovers: vscode.Hover[]): string {
-  const parts: string[] = [];
-  for (const h of hovers) {
-    for (const c of h.contents) {
-      if (typeof c === "string") parts.push(c);
-      else if ("language" in c) parts.push("```" + c.language + "\n" + c.value + "\n```");
-      else parts.push(c.value);
-    }
+function hoverMarkdown(h: vscode.Hover): string {
+  return h.contents
+    .map((c) => (typeof c === "string" ? c : "language" in c ? "```" + c.language + "\n" + c.value + "\n```" : c.value))
+    .filter((p) => p.trim())
+    .join("\n\n");
+}
+
+const escapeHtml = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const FENCE = /^```([\w+#.-]*)[^\n]*\n([\s\S]*?)^```[ \t]*$/gm;
+
+// One hover row as HTML: code blocks coloured like the diff, the rest through VS Code's markdown renderer.
+async function hoverRow(md: string, theme: Theme | undefined): Promise<string> {
+  const blocks: string[] = [];
+  const text = md.replace(FENCE, (_, lang: string, code: string) => `\n\nSRCODE${blocks.push(lang + "\n" + code) - 1}SR\n\n`);
+  let html: string;
+  try {
+    html = await vscode.commands.executeCommand<string>("markdown.api.render", text);
+  } catch (e) {
+    log(`Hover markdown couldn't render, so it shows as plain text: ${errText(e)}`);
+    html = `<p>${escapeHtml(text)}</p>`;
   }
-  return parts.filter((p) => p.trim()).join("\n\n---\n\n");
+  const codes = await Promise.all(blocks.map((b) => codeBlock(b.slice(0, b.indexOf("\n")), b.slice(b.indexOf("\n") + 1).replace(/\n$/, ""), theme)));
+  return html.replace(/<p[^>]*>\s*SRCODE(\d+)SR\s*<\/p>|SRCODE(\d+)SR/g, (_, a, b) => codes[Number(a ?? b)]);
+}
+
+async function codeBlock(lang: string, code: string, theme: Theme | undefined): Promise<string> {
+  const id = langOf("x." + lang.toLowerCase()) ?? lang.toLowerCase();
+  let lines: string;
+  try {
+    if (!theme || !id) throw new Error("plain");
+    const runs = await tokenizer.lines(code, id, theme);
+    lines = code.split("\n").map((line, i) =>
+      (runs[i] ?? []).map(([s, e, c]) => `<span class="sr-tm-${c}">${escapeHtml(line.slice(s, e))}</span>`).join("") || escapeHtml(line),
+    ).join("\n");
+  } catch {
+    lines = escapeHtml(code);
+  }
+  return `<pre class="sr-code"><code>${lines}</code></pre>`;
 }
 
 const VIEWED_QUERY = `query($owner: String!, $name: String!, $n: Int!, $after: String) {
@@ -204,11 +232,13 @@ class ReviewPanel implements PanelLink {
   private readonly queue = new Map<string, boolean>();
   private files: Outline["files"] = [];
   private paintSeq = 0;
+  private theme?: Theme;
   private readonly blobs = new Map<string, Promise<string | undefined>>();
 
   static show(ctx: vscode.ExtensionContext, hub: Hub, review: Review, wt: string): void {
     const open = ReviewPanel.panels.get(review.dir);
     if (open) {
+      if (open.wt !== wt) open.post({ type: "hoverReset" });
       open.wt = wt;
       open.panel.reveal();
       return;
@@ -227,9 +257,9 @@ class ReviewPanel implements PanelLink {
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(ctx.extensionUri, "media")],
     });
-    // A hover fires on every pause of the mouse, and code colours are optional, so their failures stay quiet; clicks report theirs.
+    // Hovers and code colours are optional, so their failures go to the log; clicks report theirs.
     this.panel.webview.onDidReceiveMessage((m) =>
-      this.onMessage(m).catch((e) => (m.type === "hover" ? undefined : m.type === "paint" ? log(`Colouring failed: ${errText(e)}`) : this.fail(e))),
+      this.onMessage(m).catch((e) => (m.type === "paint" ? log(`Colouring failed: ${errText(e)}`) : this.fail(e))),
     );
     this.panel.onDidDispose(() => {
       this.watcher.dispose();
@@ -244,7 +274,11 @@ class ReviewPanel implements PanelLink {
     const config = vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("storyReview.colorTheme")) this.post({ type: "repaint" });
     });
-    this.panel.onDidDispose(() => config.dispose());
+    // The page keeps hover answers, so an edit to a file in the worktree must drop them.
+    const edits = vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.contentChanges.length && e.document.uri.fsPath.startsWith(this.wt + path.sep)) this.post({ type: "hoverReset" });
+    });
+    this.panel.onDidDispose(() => { config.dispose(); edits.dispose(); });
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(review.dir), "page.html"));
     this.watcher.onDidChange(() => this.render());
     this.watcher.onDidCreate(() => this.render());
@@ -355,13 +389,15 @@ class ReviewPanel implements PanelLink {
       `script-src 'nonce-${nonce}'`,
     ].join("; ");
     const state = JSON.stringify(this.ctx.globalState.get<Record<string, string>>(this.stateKey, {})).replace(/</g, "\\u003c");
+    const h = vscode.workspace.getConfiguration("editor.hover");
+    const hover = JSON.stringify({ delay: h.get<number>("delay", 300), above: h.get<boolean>("above", true) });
     const body = page.replace(/<script(?![^>]*type="text\/markdown")/g, `<script nonce="${nonce}"`);
     webview.html =
       `<!doctype html><html><head><meta charset="utf-8">` +
       `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
       `<meta name="viewport" content="width=device-width, initial-scale=1">` +
       `<link rel="stylesheet" href="${media("bridge.css")}">` +
-      `<script nonce="${nonce}">window.__srState = ${state}; window.__srPr = ${this.review.meta.pr};</script>` +
+      `<script nonce="${nonce}">window.__srState = ${state}; window.__srPr = ${this.review.meta.pr}; window.__srHover = ${hover};</script>` +
       `<script nonce="${nonce}" src="${media("bridge.js")}"></script>` +
       `</head><body>${body}</body></html>`;
   }
@@ -409,21 +445,24 @@ class ReviewPanel implements PanelLink {
         await this.paint(m as PaintRequest);
         return;
       case "hover": {
-        const uri = this.uri(m.path);
-        await vscode.workspace.openTextDocument(uri);
-        const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
-          "vscode.executeHoverProvider", uri, new vscode.Position(m.line - 1, m.col),
-        );
-        const md = hoverMarkdown(hovers ?? []);
+        const at = `${m.path}:${m.line}:${m.col + 1}`;
         let html = "";
-        if (md) {
-          try {
-            html = await vscode.commands.executeCommand<string>("markdown.api.render", md);
-          } catch {
-            html = `<pre>${md.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre>`;
-          }
+        try {
+          const t0 = Date.now();
+          const uri = this.uri(m.path);
+          await vscode.workspace.openTextDocument(uri);
+          const t1 = Date.now();
+          const hovers = await vscode.commands.executeCommand<vscode.Hover[]>(
+            "vscode.executeHoverProvider", uri, new vscode.Position(m.line - 1, m.col),
+          );
+          const t2 = Date.now();
+          const rows = await Promise.all((hovers ?? []).map(hoverMarkdown).filter((md) => md).map((md) => hoverRow(md, this.theme)));
+          html = rows.map((r) => `<div class="sr-tip-row">${r}</div>`).join("");
+          log(`Hover ${at}: open ${t1 - t0}ms, provider ${t2 - t1}ms, render ${Date.now() - t2}ms, ${rows.length} row(s).`);
+        } catch (e) {
+          log(`Hover ${at} failed: ${errText(e)}`);
         }
-        void this.panel.webview.postMessage({ type: "hover", id: m.id, html });
+        this.post({ type: "hover", id: m.id, html, colors: tokenizer.colors });
         return;
       }
       case "definition": {
@@ -494,6 +533,7 @@ class ReviewPanel implements PanelLink {
       log(`Code colours: couldn't load that theme (${errText(e)}), so code uses ${pick.id}.`);
       theme = await tokenizer.theme(pick.id);
     }
+    this.theme = theme;
     const { base, head } = this.review.meta;
     const tm = new Map<string, { src: string[]; runs: Run[][] }>();
     for (const [file, want] of Object.entries(m.files)) {

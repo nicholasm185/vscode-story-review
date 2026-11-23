@@ -107,12 +107,18 @@
     return doc.body.innerHTML;
   }
 
-  let tip, timer, shownKey = null, wantKey = null, seq = 0, overTip = false;
+  const HOVER = Object.assign({ delay: 300, above: true }, window.__srHover || {});
+  // Asking once the pointer settles, not when the card is due, hides the language server's time inside the delay.
+  const SETTLE = 60;
+  let tip, settleTimer, showTimer, shownKey = null, want = null, seq = 0, overTip = false;
   const keyOf = (w) => w.path + ":" + w.line + ":" + w.s;
+  const answers = new Map(), asking = new Set(), pending = new Map();
 
   function hideTip() {
+    clearTimeout(settleTimer);
+    clearTimeout(showTimer);
     shownKey = null;
-    wantKey = null;
+    want = null;
     if (tip) tip.hidden = true;
     mark(null);
   }
@@ -122,44 +128,71 @@
     tip.innerHTML = sanitize(html);
     tip.hidden = false;
     const box = (r.getBoundingClientRect ? r : w.td).getBoundingClientRect();
-    const width = Math.min(560, window.innerWidth - 24);
-    tip.style.maxWidth = width + "px";
-    tip.style.left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8)) + "px";
-    const below = box.bottom + 6;
+    tip.style.left = "0px";
     tip.style.top = "0px";
-    const h = tip.offsetHeight;
-    tip.style.top = (below + h < window.innerHeight - 8 ? below : Math.max(8, box.top - h - 6)) + "px";
+    const width = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8)) + "px";
+    const above = box.top - h - 4, below = box.bottom + 4;
+    const fitsAbove = above >= 8, fitsBelow = below + h <= window.innerHeight - 8;
+    tip.style.top = (HOVER.above ? (fitsAbove || !fitsBelow ? Math.max(8, above) : below) : (fitsBelow || !fitsAbove ? below : above)) + "px";
     shownKey = keyOf(w);
   }
 
-  const pending = new Map();
+  function ask(w) {
+    const k = keyOf(w);
+    if (answers.has(k) || asking.has(k)) return;
+    asking.add(k);
+    const id = ++seq;
+    pending.set(id, k);
+    vscode.postMessage({ type: "hover", id, path: w.path, line: w.line, col: w.col });
+  }
+
+  function showIfReady() {
+    if (!want || overTip || !want.due) return;
+    const html = answers.get(want.key);
+    if (html) showTip(want.w, html);
+  }
+
+  function onHoverReply(m) {
+    const k = pending.get(m.id);
+    pending.delete(m.id);
+    if (!k) return;
+    asking.delete(k);
+    if (m.colors) setColors(m.colors);
+    // An empty answer may only mean the language server is still loading, so it is asked again next time.
+    if (m.html) answers.set(k, m.html);
+    if (want && want.key === k) showIfReady();
+  }
 
   window.addEventListener("message", (ev) => {
     const m = ev.data;
-    if (m && m.type === "hover") {
-      const w = pending.get(m.id);
-      pending.delete(m.id);
-      if (w && keyOf(w) === wantKey && m.html) showTip(w, m.html);
-    }
+    if (m && m.type === "hover") onHoverReply(m);
+    if (m && m.type === "hoverReset") forgetHovers();
   });
+
+  // Answers still on their way were asked before the reset, so they are dropped too.
+  function forgetHovers() {
+    answers.clear();
+    asking.clear();
+    pending.clear();
+  }
 
   function onMove(e) {
     if (overTip) return;
     const w = wordAt(e);
     const k = w && keyOf(w);
-    if (k && k === shownKey) return;
-    clearTimeout(timer);
+    if (k && (k === shownKey || (want && want.key === k))) return;
+    clearTimeout(settleTimer);
+    clearTimeout(showTimer);
     if (!w) {
-      timer = setTimeout(() => { if (!overTip) hideTip(); }, 250);
+      want = null;
+      showTimer = setTimeout(() => { if (!overTip) hideTip(); }, 250);
       return;
     }
     if (shownKey) hideTip();
-    wantKey = k;
-    timer = setTimeout(() => {
-      const id = ++seq;
-      pending.set(id, w);
-      vscode.postMessage({ type: "hover", id, path: w.path, line: w.line, col: w.col });
-    }, 350);
+    const next = want = { w, key: k, due: false };
+    if (!answers.has(k)) settleTimer = setTimeout(() => ask(w), SETTLE);
+    showTimer = setTimeout(() => { next.due = true; showIfReady(); }, HOVER.delay);
   }
 
   // The first added line of a file block, or its first line when nothing was added there; null for a deleted file.
@@ -411,10 +444,11 @@
       CSS.highlights.set("sr-tm-" + i, tmHighlights[i]);
     }
     tmStyle = tmStyle || document.head.appendChild(document.createElement("style"));
-    tmStyle.textContent = colors.map((c, i) => /^#[0-9a-f]{3,8}$/i.test(c) ? "::highlight(sr-tm-" + i + ") { color: " + c + "; }" : "").join("\n");
+    tmStyle.textContent = colors.map((c, i) => /^#[0-9a-f]{3,8}$/i.test(c) ? "::highlight(sr-tm-" + i + "), .sr-tip .sr-tm-" + i + " { color: " + c + "; }" : "").join("\n");
   }
 
   function requestPaint() {
+    forgetHovers();
     for (const k of Object.keys(paints)) delete paints[k];
     document.querySelectorAll("table.diff td.code").forEach(unpaint);
     painted = new WeakMap();
@@ -493,7 +527,7 @@
     tip = document.createElement("div");
     tip.className = "sr-tip";
     tip.hidden = true;
-    tip.addEventListener("mouseenter", () => { overTip = true; clearTimeout(timer); });
+    tip.addEventListener("mouseenter", () => { overTip = true; clearTimeout(showTimer); });
     tip.addEventListener("mouseleave", () => { overTip = false; hideTip(); });
     document.body.appendChild(tip);
     document.addEventListener("mousemove", onMove);

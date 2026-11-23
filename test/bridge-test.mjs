@@ -39,13 +39,15 @@ const page = fs.readFileSync(path.join(reviewDir, "page.html"), "utf8")
   .replace(/<script(?![^>]*type="text\/markdown")/g, `<script nonce="${nonce}"`);
 const bridge = fs.readFileSync(path.join(here, "..", "media", "bridge.js"), "utf8");
 const css = fs.readFileSync(path.join(here, "..", "media", "bridge.css"), "utf8");
-const write = (name, state) => fs.writeFileSync(path.join(out, name),
+const write = (name, state, hover) => fs.writeFileSync(path.join(out, name),
   `<!doctype html><html><head><meta charset="utf-8">` +
   `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; script-src 'nonce-${nonce}'">` +
   `<style>${css}</style>` +
-  `<script nonce="${nonce}">window.__msgs = []; window.acquireVsCodeApi = () => ({ postMessage: (m) => window.__msgs.push(m) }); window.__srState = ${JSON.stringify(state)};</script>` +
+  `<script nonce="${nonce}">window.__msgs = []; window.acquireVsCodeApi = () => ({ postMessage: (m) => window.__msgs.push(m) }); window.__srState = ${JSON.stringify(state)}; window.__srHover = ${JSON.stringify(hover ?? null)};</script>` +
   `<script nonce="${nonce}">${bridge}</script></head><body class="vscode-dark">${page}</body></html>`);
-write("test.html", {});
+// A longer hover delay than the default, and the card below the line, as editor.hover.* would set them.
+const HOVER_DELAY = 600;
+write("test.html", {}, { delay: HOVER_DELAY, above: false });
 
 const port = 9300 + Math.floor(Math.random() * 600);
 // Ubuntu runners block the sandbox's user namespaces, so CI runs without it.
@@ -123,7 +125,7 @@ await js(`window.postMessage(${JSON.stringify({ type: "paint", colors: ["#ff0000
 await sleep(200);
 const painted = await js(`(() => { const td = ${cellFor(false, LINE)}, other = ${cellFor(false, OTHER)};
   return { on: td.classList.contains("sr-tm"), same: td.innerHTML === ${JSON.stringify(before)},
-    hl: CSS.highlights.get("sr-tm-0")?.size || 0, other: other.classList.contains("sr-tm"), css: [...document.querySelectorAll("style")].some(s => s.textContent.includes("::highlight(sr-tm-1) { color: #00ff00; }")) }; })()`);
+    hl: CSS.highlights.get("sr-tm-0")?.size || 0, other: other.classList.contains("sr-tm"), css: [...document.querySelectorAll("style")].some(s => s.textContent.includes("::highlight(sr-tm-1), .sr-tip .sr-tm-1 { color: #00ff00; }")) }; })()`);
 check("a sent line paints as highlights without changing the cell", painted?.on && painted.same && painted.hl > 0 && painted.css, JSON.stringify(painted));
 check("a line whose text differs stays unpainted", painted?.other === false);
 
@@ -143,18 +145,55 @@ for (const split of [false, true]) {
   const p = await locate(split);
   if (!p) { check(`${view}: found ${WORD}`, false); continue; }
   await sleep(300);
+  // Split view shows the same line, so drop unified's answer to see split ask for its own.
+  await js(`window.postMessage({ type: "hoverReset" }, "*")`);
+  const away = () => send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 4, y: 4 });
+  const asked = () => js(`window.__msgs.filter(m => m.type === "hover").length`);
+  const tipNow = () => js(`(() => { const t = document.querySelector(".sr-tip"); const c = t.querySelector(".sr-tm-1");
+    return { shown: !t.hidden, html: t.innerHTML, pwned: !!window.__pwned, code: c ? getComputedStyle(c).color : null, top: t.getBoundingClientRect().top }; })()`);
+  await away();
+  await sleep(400);
+  const n0 = await asked();
   await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
-  await sleep(700);
+  await sleep(150);
   const h = await lastMsg("hover");
+  check(`${view}: hover is asked for before the card is due`, (await asked()) === n0 + 1);
   check(`${view}: hover names the word's position`, h && h.path === FILE && h.line === LINE && h.col === wantCol,
     JSON.stringify(h) + ` want col ${wantCol}`);
   if (h) {
-    await js(`window.postMessage({ type: "hover", id: ${h.id}, html: '<p><code>func bestDiscount(sum int, codes []string) int</code></p><img src="x" onerror="window.__pwned=1"><a href="javascript:alert(1)">x</a>' }, "*")`);
-    await sleep(300);
-    const tip = await js(`(() => { const t = document.querySelector(".sr-tip"); return { shown: !t.hidden, html: t.innerHTML, pwned: !!window.__pwned }; })()`);
+    const html = '<div class="sr-tip-row"><pre class="sr-code"><code><span class="sr-tm-0">func</span> <span class="sr-tm-1">bestDiscount</span>(sum int, codes []string) int</code></pre></div>' +
+      '<div class="sr-tip-row"><img src="x" onerror="window.__pwned=1"><a href="javascript:alert(1)">x</a></div>';
+    const reply = (id) => js(`window.postMessage(${JSON.stringify({ type: "hover", id, html, colors: ["#ff0000", "#00ff00"] })}, "*")`);
+    await reply(h.id);
+    await sleep(20);
+    check(`${view}: an early answer waits for VS Code's hover delay`, !(await tipNow()).shown);
+    await sleep(HOVER_DELAY);
+    const tip = await tipNow();
     check(`${view}: hover card shows`, tip.shown && tip.html.includes(WORD));
+    check(`${view}: with editor.hover.above off the card sits below the word`, tip.top > p.y, `${tip.top} vs ${p.y}`);
     check(`${view}: hover card is sanitized`, !tip.pwned && !/onerror|javascript:/.test(tip.html), tip.html.slice(0, 120));
+    check(`${view}: code in the card takes the theme's colours`, tip.code === "rgb(0, 255, 0)", String(tip.code));
     check(`${view}: word is highlighted`, await js(`CSS.highlights.has("sr-word")`));
+    await away();
+    await sleep(400);
+    check(`${view}: the card hides when the pointer leaves`, !(await tipNow()).shown);
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
+    await sleep(HOVER_DELAY + 200);
+    check(`${view}: coming back reuses the answer without asking again`, (await asked()) === n0 + 1 && (await tipNow()).shown);
+    // An answer that lands after the pointer left must not pop up, but is kept for the next visit.
+    await js(`window.postMessage({ type: "hoverReset" }, "*")`);
+    await away();
+    await sleep(400);
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
+    await sleep(120);
+    await away();
+    const late = await lastMsg("hover");
+    await reply(late.id);
+    await sleep(400);
+    check(`${view}: a late answer doesn't show once the pointer has left`, late.id !== h.id && !(await tipNow()).shown);
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: p.x, y: p.y });
+    await sleep(HOVER_DELAY + 200);
+    check(`${view}: the late answer is used on the next visit`, (await lastMsg("hover")).id === late.id && (await tipNow()).shown);
   }
   await click(p.x, p.y, 4);
   const d = await lastMsg("definition");
