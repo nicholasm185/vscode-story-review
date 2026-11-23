@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- VS Code's own themes are bundled, so Dark 2026, Light 2026, Dark Modern, Dark+, the Visual Studio
+  themes and the high contrast ones colour code exactly as the editor does. Before, Dark 2026 fell
+  back to Dark Modern's colours.
+- `storyReview.colorTheme` picks the theme for code colours: a theme name, or the path to any
+  theme's `.json` file (comments and `include` work). Changing it recolours an open review.
+
 ## 0.4.0
 
 - Code on the page takes the colours of your VS Code theme. Every line is tokenized from the whole

@@ -324,6 +324,8 @@
     const m = ev.data || {};
     if (m.type === "paint") {
       onPaint(m);
+    } else if (m.type === "repaint") {
+      requestPaint();
     } else if (m.type === "syncViewed") {
       applyViewed(m.viewed, m.listed || m.viewed);
     } else if (m.type === "layout") {

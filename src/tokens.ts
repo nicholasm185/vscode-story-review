@@ -20,6 +20,18 @@ import toml from "@shikijs/langs/toml";
 import make from "@shikijs/langs/make";
 import proto from "@shikijs/langs/proto";
 import hcl from "@shikijs/langs/hcl";
+import * as fs from "fs";
+import * as path from "path";
+import dark2026 from "./themes/2026-dark.jsonc";
+import light2026 from "./themes/2026-light.jsonc";
+import darkModern from "./themes/dark_modern.jsonc";
+import darkPlus from "./themes/dark_plus.jsonc";
+import darkVs from "./themes/dark_vs.jsonc";
+import lightModern from "./themes/light_modern.jsonc";
+import lightPlus from "./themes/light_plus.jsonc";
+import lightVs from "./themes/light_vs.jsonc";
+import hcBlack from "./themes/hc_black.jsonc";
+import hcLight from "./themes/hc_light.jsonc";
 
 /** One coloured run in a line: [start, end, palette index]. */
 export type Run = [number, number, number];
@@ -46,24 +58,109 @@ export function langOf(file: string): string | undefined {
   return BY_EXT[base.split(".").pop()!.toLowerCase()];
 }
 
-// VS Code's built-in theme labels differ from Shiki's ids; Modern and Plus share token colours.
+// VS Code's own themes (extensions/theme-defaults at the server's commit), each naming the file it builds on.
+const VSCODE_THEMES: Record<string, string> = {
+  "2026-dark": dark2026, "2026-light": light2026, dark_modern: darkModern, dark_plus: darkPlus, dark_vs: darkVs,
+  light_modern: lightModern, light_plus: lightPlus, light_vs: lightVs, hc_black: hcBlack, hc_light: hcLight,
+};
+
+// VS Code's labels and settings ids for its own themes, old and new spellings.
 const ALIASES: Record<string, string> = {
-  "default dark modern": "dark-plus", "dark modern": "dark-plus", "default dark+": "dark-plus", "dark+": "dark-plus",
-  "dark+ (default dark)": "dark-plus", "visual studio dark": "dark-plus", "dark (visual studio)": "dark-plus",
-  "default high contrast": "dark-plus", "default light modern": "light-plus", "light modern": "light-plus",
-  "default light+": "light-plus", "light+": "light-plus", "light+ (default light)": "light-plus",
-  "visual studio light": "light-plus", "light (visual studio)": "light-plus", "default high contrast light": "light-plus",
+  "dark 2026": "vscode:2026-dark", "2026 dark": "vscode:2026-dark", "light 2026": "vscode:2026-light", "2026 light": "vscode:2026-light",
+  "default dark modern": "vscode:dark_modern", "dark modern": "vscode:dark_modern",
+  "default dark+": "vscode:dark_plus", "dark+": "vscode:dark_plus", "dark+ (default dark)": "vscode:dark_plus",
+  "visual studio dark": "vscode:dark_vs", "dark (visual studio)": "vscode:dark_vs", "default dark": "vscode:dark_vs",
+  "default light modern": "vscode:light_modern", "light modern": "vscode:light_modern",
+  "default light+": "vscode:light_plus", "light+": "vscode:light_plus", "light+ (default light)": "vscode:light_plus",
+  "visual studio light": "vscode:light_vs", "light (visual studio)": "vscode:light_vs", "default light": "vscode:light_vs",
+  "default high contrast": "vscode:hc_black", "dark high contrast": "vscode:hc_black", "high contrast": "vscode:hc_black",
+  "default high contrast light": "vscode:hc_light", "light high contrast": "vscode:hc_light",
   "monokai": "monokai", "solarized dark": "solarized-dark", "solarized light": "solarized-light",
 };
 
-/** The bundled theme for a VS Code theme label, or the default for the light or dark kind. */
+/** VS Code's theme files allow comments and trailing commas. */
+export function parseJsonc(text: string): any {
+  let out = "", i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+    } else if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, "$1"));
+}
+
+interface RawTheme {
+  name?: string;
+  type?: string;
+  include?: string;
+  colors?: Record<string, string>;
+  tokenColors?: unknown;
+  semanticHighlighting?: boolean;
+  semanticTokenColors?: Record<string, unknown>;
+}
+
+type Loader = (ref: string, from?: string) => { theme: RawTheme | unknown[]; where: string };
+
+// Flattens a theme's include chain, the parent's rules first so the theme's own rules win.
+function resolveTheme(load: Loader, ref: string, from?: string): RawTheme {
+  const { theme, where } = load(ref, from);
+  const own = theme as RawTheme;
+  const parent: RawTheme = own.include ? resolveTheme(load, own.include, where) : {};
+  let rules = own.tokenColors ?? [];
+  if (typeof rules === "string") {
+    const t = load(rules, where).theme;
+    rules = Array.isArray(t) ? t : t.tokenColors ?? [];
+  }
+  return {
+    name: own.name ?? parent.name,
+    type: own.type ?? parent.type,
+    colors: { ...parent.colors, ...own.colors },
+    tokenColors: [...((parent.tokenColors as unknown[]) ?? []), ...(rules as unknown[])],
+    semanticHighlighting: own.semanticHighlighting ?? parent.semanticHighlighting,
+    semanticTokenColors: { ...parent.semanticTokenColors, ...own.semanticTokenColors },
+  };
+}
+
+function vscodeTheme(name: string): RawTheme {
+  return resolveTheme((ref) => {
+    const text = VSCODE_THEMES[ref.replace(/^\.\//, "").replace(/\.json$/, "")];
+    if (!text) throw new Error(`VS Code theme ${ref} isn't bundled.`);
+    return { theme: parseJsonc(text), where: "" };
+  }, name);
+}
+
+function fileTheme(file: string): RawTheme {
+  return resolveTheme((ref, from) => {
+    const p = from ? path.resolve(from, ref) : ref.replace(/^~(?=$|\/)/, process.env.HOME ?? "~");
+    if (!p.endsWith(".json")) throw new Error(`${p}: only .json theme files are supported, not .tmTheme.`);
+    return { theme: parseJsonc(fs.readFileSync(p, "utf8")), where: path.dirname(p) };
+  }, file);
+}
+
+/**
+ * The theme for a VS Code theme label or a storyReview.colorTheme value: a VS Code built-in theme,
+ * a bundled Shiki theme, or "file:" and a path to a theme's .json file. Unknown names fall back by kind.
+ */
 export function themeIdFor(label: string | undefined, dark: boolean): { id: string; matched: boolean } {
   const key = (label ?? "").trim().toLowerCase();
+  if (key.startsWith("file:")) return { id: "file:" + label!.trim().slice(5), matched: true };
   if (ALIASES[key]) return { id: ALIASES[key], matched: true };
   const slug = key.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const hit = bundledThemesInfo.find((t) => t.id === key || t.id === slug || t.displayName.toLowerCase() === key);
   if (hit) return { id: hit.id, matched: true };
-  return { id: dark ? "dark-plus" : "light-plus", matched: false };
+  return { id: dark ? "vscode:2026-dark" : "vscode:2026-light", matched: false };
 }
 
 export class Tokenizer {
@@ -79,8 +176,14 @@ export class Tokenizer {
   async theme(id: string): Promise<Theme> {
     const hl = await this.highlighter();
     if (!hl.getLoadedThemes().includes(id)) {
-      const info = bundledThemesInfo.find((t) => t.id === id)!;
-      await hl.loadTheme((await info.import()).default);
+      if (id.startsWith("vscode:") || id.startsWith("file:")) {
+        const raw = id.startsWith("vscode:") ? vscodeTheme(id.slice(7)) : fileTheme(id.slice(5));
+        const type = raw.type === "light" || raw.type === "vs" || /light/i.test(id) ? "light" : "dark";
+        await hl.loadTheme({ ...raw, name: id, type, settings: raw.tokenColors as never } as never);
+      } else {
+        const info = bundledThemesInfo.find((t) => t.id === id)!;
+        await hl.loadTheme((await info.import()).default);
+      }
     }
     return { id, resolved: hl.getTheme(id) };
   }

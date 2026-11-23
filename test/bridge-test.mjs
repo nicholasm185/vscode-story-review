@@ -278,6 +278,9 @@ await sleep(300);
 const vkey = await lastMsg("viewedChange");
 check("the v key's tick is sent to GitHub too", vkey && vkey.path, JSON.stringify(vkey));
 
+await js(`window.__msgs.length = 0; window.postMessage({ type: "repaint" }, "*")`);
+await sleep(200);
+check("changing the colour theme setting asks for colours again", !!(await lastMsg("paint")));
 await js(`window.__msgs.length = 0; document.body.dataset.vscodeThemeId = "Monokai"`);
 await sleep(200);
 const reask = await lastMsg("paint");

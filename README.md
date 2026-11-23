@@ -15,7 +15,8 @@ it opens the ones the skill builds. In Claude Code, install the skill with
   (⇧⌘ or ⇧Ctrl-click) work on added and unchanged lines. Removed lines have no file to ask about.
 - **Code coloured like your editor.** Diff lines take the colours of your VS Code theme, from the
   same TextMate grammars the editor uses, plus the language server's semantic colours on added and
-  unchanged lines (functions, types, parameters, constants), as in an editor tab.
+  unchanged lines (functions, types, parameters, constants), as in an editor tab. To pick another
+  theme, set `storyReview.colorTheme`.
 - **Code beside the review.** Clicking a line number or a file name opens that file in an editor
   next to the panel. ⌥-click on a line number copies `path:line` instead.
 - **Contents in the side bar.** The Story Review view lists the chapters (with read marks), the
@@ -114,6 +115,7 @@ Files view, or with the page's `v` key writes the change back.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `storyReview.reviewsRoot` | `~/.claude/story-reviews` | The folder that holds `<owner>-<repo>/pr-<n>/` review folders. |
+| `storyReview.colorTheme` | empty (follow VS Code) | The theme for code colours: a VS Code built-in theme such as `Dark 2026`, a bundled theme such as `One Dark Pro`, or the path to a theme's `.json` file. |
 
 ## Troubleshooting
 
@@ -125,10 +127,13 @@ Files view, or with the page's `v` key writes the change back.
   points at the review's repository. Open the right checkout, or add the repository as a remote.
 - **Hover shows nothing.** Check that the language extension works in an ordinary editor tab first.
   Hover only works on added and unchanged lines.
-- **Code colours don't match your theme.** The extension carries its own copy of about 65 popular
-  themes, because the VS Code server can't see themes installed on your own machine. A theme it
-  doesn't carry falls back to Dark Modern or Light Modern; the Story Review output channel names
-  the fallback. Colours from `editor.tokenColorCustomizations` aren't applied.
+- **Code colours don't match your theme.** The extension carries VS Code's built-in themes and about
+  65 popular ones, because the VS Code server can't see themes installed on your own machine. A
+  theme it doesn't carry falls back to Dark 2026 or Light 2026, and the Story Review output channel
+  names the theme it used. For any other theme, copy its `.json` file (and any file it `include`s)
+  to the machine with your code and set `storyReview.colorTheme` to that path. On a Mac, installed
+  themes live in `~/.vscode/extensions/<publisher.name-version>/themes/`. Colours from
+  `editor.tokenColorCustomizations` aren't applied.
 - **Some lines stay uncoloured.** Only these languages are coloured: Go, TypeScript, JavaScript
   (and JSX), JSON, YAML, SQL, Python, CSS, SCSS, HTML, shell, Dockerfile, TOML, Makefile, Protocol
   Buffers and HCL. A line is also left alone when its text differs from the commit in `meta.json`.
@@ -163,7 +168,8 @@ artifact.
 - `src/extension.ts`: the Open Review command, the checkout, the review panel, language features
   for the page, and the GitHub Viewed sync.
 - `src/tokens.ts`: code colours. It wraps Shiki (VS Code's TextMate grammars and themes), maps a VS
-  Code theme name to a bundled theme, and maps semantic tokens to colours with VS Code's own
+  Code theme name to a bundled theme (VS Code's own themes are in `src/themes`, copied from
+  `extensions/theme-defaults` in the VS Code repository under its MIT license), and maps semantic tokens to colours with VS Code's own
   fallback scopes. It doesn't import `vscode`, so it's tested in plain Node.
 - `src/views.ts`: the Chapters, Findings and Files trees, the Notes view, and the hub that passes
   messages between them and the panel.

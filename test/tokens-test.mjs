@@ -10,7 +10,7 @@ fs.mkdirSync(out, { recursive: true });
 // CommonJS, like the shipped bundle, so the grammar engine loads the way it does in VS Code.
 const bundle = path.join(out, "tokens.cjs");
 execFileSync(path.join(here, "..", "node_modules", ".bin", "esbuild"),
-  [path.join(here, "..", "src", "tokens.ts"), "--bundle", "--platform=node", "--format=cjs", `--outfile=${bundle}`, "--log-level=warning"]);
+  [path.join(here, "..", "src", "tokens.ts"), "--bundle", "--platform=node", "--format=cjs", "--loader:.jsonc=text", `--outfile=${bundle}`, "--log-level=warning"]);
 const t = createRequire(import.meta.url)(bundle);
 
 const results = [];
@@ -49,8 +49,31 @@ check("a theme's own semanticTokenColors win", sem("newOperator") === "#C586C0",
 check("semantic colouring follows the setting, then the theme", t.semanticOn(dark.resolved, "configuredByTheme") && !t.semanticOn(dark.resolved, false));
 check("overlay splits TextMate runs around a semantic span", JSON.stringify(t.overlay([[0, 10, 1], [10, 20, 2]], [[5, 12, 9]])) === "[[0,5,1],[5,12,9],[12,20,2]]");
 
-const themes = [["Default Light Modern", false, "light-plus"], ["One Dark Pro", true, "one-dark-pro"], ["GitHub Dark Default", true, "github-dark-default"], ["Some Theme", false, "light-plus"]];
-check("VS Code theme names map to bundled themes", themes.every(([n, d, id]) => t.themeIdFor(n, d).id === id) && !t.themeIdFor("Some Theme", true).matched);
+const themes = [["Dark 2026", true, "vscode:2026-dark"], ["Default Light Modern", false, "vscode:light_modern"], ["Dark+", true, "vscode:dark_plus"],
+  ["One Dark Pro", true, "one-dark-pro"], ["GitHub Dark Default", true, "github-dark-default"], ["Some Theme", false, "vscode:2026-light"]];
+check("VS Code theme names map to bundled themes", themes.every(([n, d, id]) => t.themeIdFor(n, d).id === id) && !t.themeIdFor("Some Theme", true).matched,
+  themes.map(([n, d]) => t.themeIdFor(n, d).id).join(" "));
+
+const builtIns = ["2026-dark", "2026-light", "dark_modern", "dark_plus", "dark_vs", "light_modern", "light_plus", "light_vs", "hc_black", "hc_light"];
+const loaded = [];
+for (const b of builtIns) { try { const th = await tk.theme("vscode:" + b); if (th.resolved.settings.length > 20) loaded.push(b); } catch (e) { console.log(b, e.message); } }
+check("every VS Code built-in theme loads with its include chain", loaded.length === builtIns.length, loaded.join(" "));
+
+const d26 = await tk.theme(t.themeIdFor("Dark 2026", true).id);
+const goD26 = await tk.lines(goSrc, "go", d26);
+check("Dark 2026 takes its own colours over Dark Modern's", colorOf(go, goD26, fn, "func") === "#FF7B72" && colorOf(go, goD26, fn, "Total") === "#D2A8FF" && colorOf(go, goD26, 2, "Item") === "#8B949E",
+  [colorOf(go, goD26, fn, "func"), colorOf(go, goD26, fn, "Total"), colorOf(go, goD26, 2, "Item")].join(" "));
+
+const dir = fs.mkdtempSync(path.join(out, "theme-"));
+fs.writeFileSync(path.join(dir, "base.json"), `{ // a comment\n "type": "dark", "tokenColors": [{ "scope": "keyword", "settings": { "foreground": "#111111" } },], }`);
+fs.mkdirSync(path.join(dir, "mine"));
+fs.writeFileSync(path.join(dir, "mine", "theme.json"), `{ "include": "../base.json", /* own */ "tokenColors": [{ "scope": "entity.name.function", "settings": { "foreground": "#222222" } }] }`);
+const pick = t.themeIdFor("file:" + path.join(dir, "mine", "theme.json"), true);
+const own = await tk.theme(pick.id);
+const goOwn = await tk.lines(goSrc, "go", own);
+check("a theme .json file loads, with comments and an include relative to it", colorOf(go, goOwn, fn, "func") === "#111111" && colorOf(go, goOwn, fn, "Total") === "#222222",
+  [colorOf(go, goOwn, fn, "func"), colorOf(go, goOwn, fn, "Total")].join(" "));
+check("JSONC keeps // inside strings", t.parseJsonc(`{"a": "vscode://x", // c\n "b": [1,],}`).a === "vscode://x");
 check("file names pick a language", t.langOf("a/b.ts") === "typescript" && t.langOf("Dockerfile") === "docker" && t.langOf("x/Makefile") === "make" && t.langOf("README.md") === undefined);
 
 console.log(results.join("\n"));

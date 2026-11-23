@@ -241,6 +241,10 @@ class ReviewPanel implements PanelLink {
       hub.setPanel(this);
       if (Date.now() - this.lastPull > 15000) void this.pullViewed();
     });
+    const config = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("storyReview.colorTheme")) this.post({ type: "repaint" });
+    });
+    this.panel.onDidDispose(() => config.dispose());
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(review.dir), "page.html"));
     this.watcher.onDidChange(() => this.render());
     this.watcher.onDidCreate(() => this.render());
@@ -478,10 +482,18 @@ class ReviewPanel implements PanelLink {
     const seq = ++this.paintSeq;
     const kind = vscode.window.activeColorTheme.kind;
     const dark = m.theme?.kind ? !/light/.test(m.theme.kind) : kind === vscode.ColorThemeKind.Dark || kind === vscode.ColorThemeKind.HighContrast;
-    const label = m.theme?.name || configuredTheme(dark);
-    const pick = themeIdFor(label, dark);
+    const chosen = vscode.workspace.getConfiguration("storyReview").get<string>("colorTheme", "").trim();
+    const label = chosen ? (/[\\/]|\.json$/i.test(chosen) ? "file:" + chosen : chosen) : m.theme?.name || configuredTheme(dark);
+    let pick = themeIdFor(label, dark);
     log(`Code colours: theme "${label ?? "(unset)"}" → ${pick.id}${pick.matched ? "" : " (not bundled, so the default for its kind)"}.`);
-    const theme = await tokenizer.theme(pick.id);
+    let theme;
+    try {
+      theme = await tokenizer.theme(pick.id);
+    } catch (e) {
+      pick = themeIdFor(undefined, dark);
+      log(`Code colours: couldn't load that theme (${errText(e)}), so code uses ${pick.id}.`);
+      theme = await tokenizer.theme(pick.id);
+    }
     const { base, head } = this.review.meta;
     const tm = new Map<string, { src: string[]; runs: Run[][] }>();
     for (const [file, want] of Object.entries(m.files)) {

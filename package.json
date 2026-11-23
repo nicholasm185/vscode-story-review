@@ -3,7 +3,7 @@
   "displayName": "Story Review",
   "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
   "publisher": "local",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "MIT",
   "private": true,
   "engines": {
@@ -49,6 +49,11 @@
           "type": "string",
           "default": "~/.claude/story-reviews",
           "description": "Folder holding the review folders (<owner>-<repo>/pr-<n>/page.html and meta.json)."
+        },
+        "storyReview.colorTheme": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Theme for code colours on the review page. Leave empty to follow VS Code. Accepts a VS Code built-in theme (`Dark 2026`, `Dark Modern`, `Light+`), a bundled theme (`One Dark Pro`, `GitHub Dark Default`, `Catppuccin Mocha`, ...), or the path to a theme's `.json` file on the machine where your code lives."
         }
       }
     },
@@ -124,8 +129,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p . && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=out/extension.js --log-level=warning",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=out/extension.js --watch",
+    "build": "tsc -p . && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --loader:.jsonc=text --outfile=out/extension.js --log-level=warning",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --loader:.jsonc=text --outfile=out/extension.js --watch",
     "package": "npm run build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package -o dist/",
     "install-vsix": "node scripts/install.mjs",
     "release": "npm run package && npm run install-vsix",
