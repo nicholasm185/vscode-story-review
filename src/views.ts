@@ -10,11 +10,18 @@ export interface Outline {
   keysOn?: boolean;
 }
 
+export interface CheckoutStatus {
+  message?: string;
+  stale: boolean;
+}
+
 export interface PanelLink {
   post(m: unknown): void;
   reveal(): void;
   style(): string;
   remote(): Map<string, string> | undefined;
+  checkoutStatus(): CheckoutStatus;
+  checkOut(): Promise<void>;
 }
 
 type Node =
@@ -194,6 +201,8 @@ export class Hub {
     if (this.panel === p) return;
     this.panel = p;
     this.remote = p?.remote();
+    this.showCheckout(p?.checkoutStatus());
+    void vscode.commands.executeCommand("setContext", "storyReview.reviewOpen", !!p);
     if (!p) {
       this.outline = undefined;
       this.views[0].description = this.last;
@@ -217,6 +226,17 @@ export class Hub {
     this.views[0].description = o.title;
     this.refresh();
     if (this.current) void this.select(this.current);
+  }
+
+  /** Says in the Chapters view when the checkout or GitHub isn't at the reviewed code; a stale checkout shows Check Out. */
+  setCheckout(from: PanelLink, status: CheckoutStatus): void {
+    if (from === this.panel) this.showCheckout(status);
+  }
+
+  private showCheckout(status: CheckoutStatus | undefined): void {
+    const fix = status?.stale ? " Check Out PR in this bar fixes it." : "";
+    this.views[0].message = status?.message && status.message + fix;
+    void vscode.commands.executeCommand("setContext", "storyReview.checkoutStale", !!status?.stale);
   }
 
   setRemote(from: PanelLink, state: Map<string, string>): void {

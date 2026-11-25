@@ -3,7 +3,7 @@
   "displayName": "Story Review",
   "description": "Read a story review page inside VS Code, with hover, go to definition and references on its diff lines.",
   "publisher": "local",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "license": "MIT",
   "private": true,
   "engines": {
@@ -29,6 +29,12 @@
         "title": "Reopen Last Review",
         "category": "Story Review",
         "icon": "$(history)"
+      },
+      {
+        "command": "storyReview.checkout",
+        "title": "Check Out PR",
+        "category": "Story Review",
+        "icon": "$(git-pull-request)"
       },
       {
         "command": "storyReview.toggleSplit",
@@ -117,6 +123,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "storyReview.checkout",
+          "when": "view == storyReview.chapters && storyReview.checkoutStale",
+          "group": "navigation@0"
+        },
+        {
           "command": "storyReview.open",
           "when": "view == storyReview.chapters",
           "group": "navigation@1"
@@ -140,6 +151,10 @@
         {
           "command": "storyReview.goto",
           "when": "false"
+        },
+        {
+          "command": "storyReview.checkout",
+          "when": "storyReview.reviewOpen"
         }
       ]
     }
@@ -150,7 +165,7 @@
     "package": "npm run build && node -e \"require('fs').mkdirSync('dist',{recursive:true})\" && vsce package -o dist/",
     "install-vsix": "node scripts/install.mjs",
     "release": "npm run package && npm run install-vsix",
-    "test": "node test/tokens-test.mjs && node test/bridge-test.mjs",
+    "test": "node test/tokens-test.mjs && node test/checkout-test.mjs && python3 -I test/carry_test.py && node test/bridge-test.mjs",
     "fixture": "node test/fixture/build.mjs"
   },
   "devDependencies": {

@@ -24,7 +24,8 @@ how to write come from the reviewer's **style** (see [Review style](#review-styl
    whose PRs changed since (with their verdicts, findings, and `carry` notes), the body, the hunk
    map with each hunk's new-file lines, and the build command. Don't repeat those `gh` and `git`
    calls. Read code with `git show <head>:<path>`. Don't repeat a finding a thread already raised
-   or fixed. Tell the user which reviewed PRs gained commits.
+   or fixed. Tell the user which reviewed PRs gained commits. If prep says `re-review:`, follow
+   [Re-review](#re-review) instead of steps 3 to 5.
 3. **Review** the way the style says.
 4. **Grade findings** with the style's definitions. The page has four levels: `high`, `med`, `low`,
    and `nit`.
@@ -43,7 +44,8 @@ how to write come from the reviewer's **style** (see [Review style](#review-styl
 7. **Show the page.**
    - If the style says the reader uses the Story Review VS Code extension
      (https://github.com/nicholasm185/vscode-story-review), don't publish unless they ask. The extension reads `page.html` from the review folder: tell them to run **Story Review:
-     Open Review** and pick the PR, which also checks the PR out.
+     Open Review** and pick the PR, which also checks the PR out. After a re-review, an open page
+     reloads by itself and offers to check out the new head.
    - With an Artifact tool: publish `page.html`. On the first publish, pass `icon: "code"` and a
      one-sentence description, then write the URL into `meta.json`. To update, publish the same
      `file_path` again, or, from another session, pass `url` from `meta.json` (the tool makes you
@@ -54,6 +56,30 @@ how to write come from the reviewer's **style** (see [Review style](#review-styl
    and the PR's place in the stack. Don't post to GitHub unless the user asks; each finding has a
    "Copy as PR comment" button. After posting, set `"posted": true` in `meta.json`. Put anything
    the next review in the stack must check in `meta.json` as `"carry": ["..."]`; prep prints it.
+
+## Re-review
+
+When the PR's head moved since the last review, prep keeps that review as `template-<head>.html`
+and `page-<head>.html` and carries `template.html` forward. It prints two extra sections:
+
+- **Since the last review:** the commits after it, the files whose own change differs (and the
+  `git diff` that shows them), the earlier findings at their new lines, flagged where a line
+  changed, and the `fixed`, `accepted`, and `carry` notes.
+- **Line references:** every `file:N` in the prose and every `:N` key in the flow map has been
+  moved to the new head. Only the ones under CHECK need a look: their lines changed. Numeric
+  anchors in directives (`<!--@step 12-14-->`, `from="40"`, `pin=`) aren't moved; prefer text.
+
+Then:
+
+1. Review what changed: read the `git diff` prep printed, re-check the flagged findings, and check
+   that the fixes hold. You don't need the first review's context. Start fresh (this session or a
+   new agent); resuming the agent that wrote the first review re-reads its whole context each time.
+2. Update `template.html` with small edits: Edit, or one script of exact replacements. Don't
+   rewrite it whole.
+3. When a finding is fixed, remove its card, say so in the checked list, and add
+   `"f2 (<sha>: how)"` to `fixed` in `meta.json`. A finding the author keeps on purpose goes in
+   `accepted` the same way. New findings take the next unused id.
+4. Build, show the page (step 7), and reply (step 8) with what changed since the last review.
 
 ## Review style
 
@@ -78,7 +104,7 @@ the build's checks stay as they are.
 Each review lives in `~/.claude/story-reviews/<owner>-<repo>/pr-<n>/`: `template.html` (the source),
 `page.html` (the build output), `pr.json` (from prep), and `meta.json`. In `meta.json`, prep writes
 `repo`, `pr`, `base`, `head`, `reviewed`, and `previous`; the build writes `verdict` and
-`findings`; you write `url`, `posted`, and `carry`. Never keep the only copy in a session
+`findings`; you write `url`, `posted`, `carry`, `fixed`, and `accepted`. Never keep the only copy in a session
 scratchpad. It can be wiped mid-session.
 
 If a template is lost, get the page's HTML (the local `page.html`, or an Artifact `action: "read"`

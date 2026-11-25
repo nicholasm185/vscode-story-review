@@ -1344,6 +1344,16 @@ def standalone(text):
     )
 
 
+def stamp(text, diff):
+    """Names the commits the page was built from, for readers that check a checkout against it."""
+    sha = lambda ref: diff.git("rev-parse", ref).strip()
+    line = f"<!-- story-review base={sha(diff.base)} head={sha(diff.head)} -->\n"
+    if text.lstrip().lower().startswith("<!doctype"):
+        first, _, rest = text.partition("\n")
+        return first + "\n" + line + rest
+    return line + text
+
+
 def main():
     ap = argparse.ArgumentParser(description="Render a story-review page from a template and the git diff.")
     ap.add_argument("--repo", required=True, help="path to a checkout that has both commits")
@@ -1368,7 +1378,8 @@ def main():
     page = Page(diff, template.read_text(encoding="utf-8"), args.allow_incomplete, pr)
     text, total, missing, repeated = page.render()
     out = Path(args.out)
-    out.write_text(standalone(text) if args.standalone else text, encoding="utf-8")
+    full = standalone(text) if args.standalone else text
+    out.write_text(stamp(full, diff), encoding="utf-8")
     print(
         f"wrote {args.out}: {len(text):,} bytes; {len(diff.numstat)} files, {total} hunks, "
         f"{len(page.findings)} findings; missing {len(missing)}, repeated {len(repeated)}"

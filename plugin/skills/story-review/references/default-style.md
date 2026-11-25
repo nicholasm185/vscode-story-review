@@ -11,6 +11,10 @@ commit shared conventions to `.claude/story-review-style.md` in the repository u
 - Confirm each finding in the code before keeping it. Drop what you can't support.
 - A problem the PR didn't cause is a follow-up, not a reason to block.
 
+For a re-review, start a fresh agent rather than resuming the one that wrote the last review: prep
+carries the change, the findings, and the line references forward, and a resumed agent re-reads its
+whole earlier context every round.
+
 ## Severity
 
 - **High:** wrong behavior or lost data in a realistic case.

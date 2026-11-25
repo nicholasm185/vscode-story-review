@@ -94,3 +94,10 @@
 - 2026-11-23: plugin 1.2.0. The skill ships from https://github.com/nicholasm185/vscode-story-review
   as a Claude Code plugin marketplace, so it no longer depends on an organization's plugin library.
   The default style gained a `## Reading` section, and `maintaining.md` gained the release steps.
+- 2026-11-24: plugin 1.3.0, re-reviews. Prep now prints what changed since the last review: the
+  commits, the files whose own change differs, and the earlier findings at their new lines. It
+  moves the carried template's `file:N` references and flow-map `:N` keys to the new head and lists
+  the ones whose lines changed. In #4032's seven re-reviews, the agent shifted 12 to 33 of these by
+  hand each round. The build stamps the page with the base and head it was built from, for the
+  extension's checkout check. SKILL.md has a Re-review section, and `fixed` and `accepted` are
+  `meta.json` keys.

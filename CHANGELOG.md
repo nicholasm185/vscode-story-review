@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+- **Check Out PR.** While the checkout isn't the reviewed code, the Chapters view says how far
+  off it is (behind, ahead, or elsewhere). When it's behind or elsewhere, the title bar shows a
+  Check Out PR button; ahead of the review, the view asks for a re-review instead. The
+  button runs `gh pr checkout`, falls back to `review/pr-<n>` when another worktree holds the
+  branch, and resets a rebased branch: `review/pr-<n>` without asking, any other branch after
+  asking. The Git extension's HEAD changes, panel focus and window focus keep the note current.
+- **Re-reviews reload cleanly.** The page names the base and head it was built from (skill 1.3.0),
+  and the panel reads them on every rebuild. Before, an open panel kept the commits it was opened
+  with, so after a re-review it coloured code from the old head and nothing said the checkout was
+  behind. When a rebuild moves the reviewed head, a notification offers Check Out.
+- The Chapters view says when GitHub's head has moved past the reviewed one.
+- Opening a review with uncommitted changes opens it without checking out, instead of refusing.
+
 ## 0.4.4
 
 - The `story-review` skill now lives in this repository under `plugin/`, and the repository is a

@@ -134,6 +134,174 @@ def describe_change(repo, m, now):
     return f"rebased, {where}; " + ("same patch" if same else f"patch changed: git range-diff {m['base'][:9]}..{old[:9]} {base_now[:12]}..{head_now[:9]}")
 
 
+HUNK0 = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", re.M)
+REF = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{1,5}):(\d+)(?:-(\d+))?(?![\d-])")
+FLOW_TOKENS = re.compile(r'<li\b|</li>|<div>([\w./-]+\.[A-Za-z]{1,5})</div>|<span class="k">:(\d+)(?:-(\d+))?</span>')
+DIRECTIVE = re.compile(r"<!--@.*?-->", re.S)
+
+
+class LineMap:
+    """Maps line numbers at one head to the next head, through git diff -U0 between them."""
+
+    def __init__(self, repo, old, new, pr_files):
+        self.repo, self.old, self.new = repo, old, new
+        self.changed = set(git(repo, "diff", "--no-renames", "--name-only", old, new).split())
+        self.pr_files = list(pr_files)
+        self._tree = None
+        self._hunks = {}
+
+    def resolve(self, ref):
+        """The repository path a reference like deadletter.go or pkg/x.go names, or a list when it is ambiguous."""
+        def match(paths):
+            return sorted({p for p in paths if p == ref or p.endswith("/" + ref)})
+        hits = match(self.pr_files)
+        if not hits:
+            if self._tree is None:
+                self._tree = git(self.repo, "ls-tree", "-r", "--name-only", self.new).split("\n")
+            hits = match(self._tree)
+        return hits[0] if len(hits) == 1 else hits
+
+    def hunks(self, path):
+        if path not in self._hunks:
+            text = git(self.repo, "diff", "--no-renames", "-U0", self.old, self.new, "--", path)
+            count = lambda g: 1 if g is None else int(g)
+            self._hunks[path] = [
+                (int(m.group(1)), count(m.group(2)), int(m.group(3)), count(m.group(4))) for m in HUNK0.finditer(text)
+            ]
+        return self._hunks[path]
+
+    def line(self, path, n):
+        """(line at the new head, whether git changed that line)."""
+        shift = 0
+        for os_, oc, ns, nc in self.hunks(path):
+            if oc == 0:
+                if os_ >= n:
+                    break
+                shift += nc
+                continue
+            if n < os_:
+                break
+            if n < os_ + oc:
+                return max(1, ns + min(n - os_, nc - 1) if nc else ns), True
+            shift += nc - oc
+        return n + shift, False
+
+    def span(self, path, a, b):
+        """(new a, new b, touched) for lines a..b; touched when any line in it changed or lines were added inside it."""
+        na, ta = self.line(path, a)
+        nb, tb = self.line(path, b)
+        inside = any((oc and os_ <= b and os_ + oc - 1 >= a) or (not oc and a <= os_ < b) for os_, oc, _, _ in self.hunks(path))
+        return na, nb, ta or tb or inside
+
+
+def carry_line_refs(text, lm):
+    """Moves file:line references in a template from the old head to the new one; returns the text and a report."""
+    skip = [m.span() for m in DIRECTIVE.finditer(text)]
+    in_directive = lambda pos: any(a <= pos < b for a, b in skip)
+    edits, moved, check, unsure = [], [], [], []
+
+    def carry(start, end, label, ref, a, b, fmt):
+        path = lm.resolve(ref)
+        if isinstance(path, list):
+            if path and any(p in lm.changed for p in path):
+                unsure.append(f"{label} names {len(path)} files")
+            return
+        if path not in lm.changed:
+            return
+        na, nb, touched = lm.span(path, a, b)
+        new = fmt(na, nb)
+        note = f"{label} -> {new}" if (na, nb) != (a, b) else label
+        if touched:
+            check.append(note)
+        elif (na, nb) != (a, b):
+            moved.append(note)
+        if (na, nb) != (a, b):
+            edits.append((start, end, new))
+
+    for m in REF.finditer(text):
+        if in_directive(m.start()):
+            continue
+        ref, a = m.group(1), int(m.group(2))
+        b = int(m.group(3)) if m.group(3) else a
+        carry(m.start(), m.end(), m.group(0), ref, a, b,
+              lambda x, y, r=ref, rng=bool(m.group(3)): f"{r}:{x}-{y}" if rng and y != x else f"{r}:{x}")
+    current = None
+    for m in FLOW_TOKENS.finditer(text):
+        tok = m.group(0)
+        if tok.startswith("<li") or tok == "</li>":
+            current = None
+        elif m.group(1):
+            current = m.group(1)
+        elif current and not in_directive(m.start()):
+            a = int(m.group(2))
+            b = int(m.group(3)) if m.group(3) else a
+            carry(m.start(), m.end(), f"{current} :{m.group(2)}" + (f"-{m.group(3)}" if m.group(3) else ""), current, a, b,
+                  lambda x, y, rng=bool(m.group(3)): f'<span class="k">:{x}' + (f"-{y}" if rng and y != x else "") + "</span>")
+    for start, end, new in sorted(edits, reverse=True):
+        text = text[:start] + new + text[end:]
+    return text, moved, check, unsure
+
+
+def file_patch_id(repo, base, head, path):
+    diff = git(repo, "diff", "--no-renames", base, head, "--", path, check=False).stdout
+    if not diff:
+        return ""
+    pid = subprocess.run(["git", "-C", repo, "patch-id", "--stable"], input=diff, capture_output=True, text=True)
+    return (pid.stdout.split() or [""])[0]
+
+
+def since_last(repo, prev, base, head, files, lm):
+    """Lines describing how this PR moved since the review at prev["head"]."""
+    old, old_base = prev["head"], prev.get("base") or base
+    out = [f"Since the last review ({old[:9]}, {prev.get('verdict') or 'no verdict'}, {prev.get('reviewed', '?')}):"]
+    if git(repo, "merge-base", "--is-ancestor", old, head, check=False).returncode == 0:
+        log = git(repo, "log", "--first-parent", "--format=%h %p|%s", f"{old}..{head}").splitlines()
+        out.append(f"  {len(log)} commit(s) after it:")
+        for row in log[:15]:
+            sha_parents, _, subject = row.partition("|")
+            sha, *parents = sha_parents.split()
+            out.append(f"    {sha} {'(merge) ' if len(parents) > 1 else ''}{clip(subject, 90)}")
+        if len(log) > 15:
+            out.append(f"    … {len(log) - 15} more")
+    else:
+        out.append(f"  rebased or force-pushed: git range-diff {old_base[:12]}..{old[:12]} {base[:12]}..{head[:12]}")
+    if old_base != base:
+        out.append(f"  merge base moved {old_base[:9]} -> {base[:9]}; files below compare the PR's own change per file")
+    old_files = set(git(repo, "diff", "--no-renames", "--name-only", old_base, old).split())
+    differ, same = [], 0
+    for f in files:
+        if f in old_files and file_patch_id(repo, old_base, old, f) == file_patch_id(repo, base, head, f):
+            same += 1
+        else:
+            differ.append(f)
+    stat = {}
+    for row in git(repo, "diff", "--no-renames", "--numstat", old, head, "--", *differ).splitlines() if differ else []:
+        a, d, p = row.split("\t", 2)
+        stat[p] = f"+{a} -{d}"
+    for f in differ:
+        what = "new in the PR" if f not in old_files else stat.get(f, "same at both heads; only the base under it moved")
+        out.append(f"    {f}  {what}")
+    for f in sorted(old_files - set(files)):
+        out.append(f"    {f}  left the PR")
+    out.append(f"  the PR's own change is the same in {same} other file(s)")
+    touched = [f for f in differ if f in stat or f not in old_files]
+    if touched:
+        out.append(f"  read it: git diff {old[:12]} {head[:12]} -- " + " ".join(touched))
+    for fd in prev.get("findings") or []:
+        file, _, line = fd.get("at", "").rpartition(":")
+        where = fd.get("at", "")
+        if file and line.isdigit():
+            path = lm.resolve(file)
+            if isinstance(path, str) and path in lm.changed:
+                n, touched = lm.line(path, int(line))
+                where = f"{file}:{n}" + (" (its line changed: re-check)" if touched else "")
+        out.append(f"  {fd.get('id')} {fd.get('sev')} {fd.get('short')}  at {where}")
+    for key in ("fixed", "accepted", "carry"):
+        for item in prev.get(key) or []:
+            out.append(f"  {key}: {item}")
+    return out
+
+
 def hunk_map(diff):
     out = []
     for path, (adds, dels) in diff.numstat.items():
@@ -191,6 +359,8 @@ def main():
     meta_path = folder / "meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     notes = []
+    diff = Diff(repo, mb, head)
+    carried = None
     if meta.get("head") and meta["head"] != head and (folder / "template.html").exists():
         tag = meta["head"][:9]
         kept = {}
@@ -201,9 +371,16 @@ def main():
             kept[kind] = dst.name
         meta.setdefault("previous", [])
         if not any(p.get("head") == meta["head"] for p in meta["previous"] if isinstance(p, dict)):
+            snapshot = {k: meta[k] for k in ("findings", "fixed", "accepted", "carry") if meta.get(k)}
             meta["previous"].append({"head": meta["head"], "base": meta.get("base"), "reviewed": meta.get("reviewed"),
-                                     "verdict": meta.get("verdict"), **kept})
+                                     "verdict": meta.get("verdict"), **kept, **snapshot})
         notes.append(f"re-review: the review at {tag} is kept as template-{tag}.html and page-{tag}.html; template.html is its copy to update")
+        if git(repo, "cat-file", "-e", f"{meta['head']}^{{commit}}", check=False).returncode == 0:
+            lm = LineMap(repo, meta["head"], head, diff.numstat)
+            tpl = folder / "template.html"
+            text, moved, check, unsure = carry_line_refs(tpl.read_text(encoding="utf-8"), lm)
+            tpl.write_text(text, encoding="utf-8")
+            carried = (tag, moved, check, unsure)
     elif meta.get("head") == head and (meta.get("url") or meta.get("verdict")):
         notes.append(f"this head was already reviewed on {meta.get('reviewed')}: {meta.get('url', 'no URL yet')}")
     meta.update(repo=f"{owner}/{name}", pr=args.pr, base=mb, head=head, reviewed=date.today().isoformat())
@@ -225,6 +402,22 @@ def main():
     for n in notes:
         p(f"  {n}")
     p(f"  folder: {folder}")
+    prev = (meta.get("previous") or [None])[-1]
+    if isinstance(prev, dict) and prev.get("head") and prev["head"] != head:
+        if git(repo, "cat-file", "-e", f"{prev['head']}^{{commit}}", check=False).returncode == 0:
+            lm = LineMap(repo, prev["head"], head, diff.numstat)
+            p("")
+            p("\n".join(since_last(repo, prev, mb, head, list(diff.numstat), lm)))
+        else:
+            p(f"\nSince the last review: its head {prev['head'][:9]} isn't in {repo}; fetch it to compare")
+    if carried:
+        tag, moved, check, unsure = carried
+        p(f"\nLine references in template.html, carried from {tag} to {head[:9]}:")
+        p(f"  moved with the code ({len(moved)}): " + ("; ".join(moved) or "none"))
+        if check:
+            p(f"  CHECK, their lines changed ({len(check)}): " + "; ".join(check))
+        if unsure:
+            p(f"  left as is, the name fits several files: " + "; ".join(unsure))
 
     threads = gql["pullRequest"]["reviewThreads"]["nodes"]
     comments = gql["pullRequest"]["comments"]["nodes"]
@@ -259,7 +452,6 @@ def main():
     p(f"\nBody{' (first %d of %d characters; all of it is in pr.json)' % (args.body, len(body)) if len(body) > args.body else ''}:")
     p(body[: args.body].strip() or "(empty)")
 
-    diff = Diff(repo, mb, head)
     p("\nHunk map (index, new-file lines, +/-, the hunk's function):")
     p("\n".join(hunk_map(diff)))
     build = Path(__file__).resolve().parent / "build.py"

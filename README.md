@@ -121,11 +121,24 @@ After installing, run **Developer: Reload Window**.
 2. In VS Code, run **Story Review: Open Review** (or click the book in the Story Review view) and
    pick the review.
 3. If your checkout isn't at the reviewed commit, the extension asks before it runs
-   `gh pr checkout <n>`. It stops instead if you have uncommitted changes. When the pull request's
-   branch is already checked out in another worktree, it checks the pull request out as
-   `review/pr-<n>`.
+   `gh pr checkout <n>`. With uncommitted changes it opens the review without checking out. When
+   the pull request's branch is already checked out in another worktree, it checks the pull
+   request out as `review/pr-<n>`.
 4. If the pull request has commits after the reviewed one, the extension tells you, and offers to
    check out the reviewed commit so the page's lines match the files.
+
+### When the pull request gets new commits
+
+Ask for the review again. The skill carries the old review forward, and the open page reloads by
+itself when `page.html` is rebuilt. If your checkout is now behind, a notification offers
+**Check Out**.
+
+While the checkout isn't the reviewed code, the Chapters view says how far off it is. When it's
+behind the review or on another commit, the view's title bar shows **Check Out PR** (the pull
+request icon). A checkout ahead of the review needs a re-review instead, and the view says so. The button runs `gh pr checkout` again,
+which fast-forwards the branch. If the pull request was rebased, the extension resets its own
+`review/pr-<n>` branch without asking, and asks before it resets any other branch. The view also
+says when GitHub's head has moved past the reviewed one, so you know to ask for a re-review.
 
 If you close the review, the Story Review view offers **Reopen Last Review**: the review you last
 opened on the branch that's checked out now. Open Review also lists that review first.
@@ -173,9 +186,10 @@ Files view, or with the page's `v` key writes the change back.
   `editor.tokenColorCustomizations` aren't applied.
 - **Some lines stay uncoloured.** Only these languages are coloured: Go, TypeScript, JavaScript
   (and JSX), JSON, YAML, SQL, Python, CSS, SCSS, HTML, shell, Dockerfile, TOML, Makefile, Protocol
-  Buffers and HCL. A line is also left alone when its text differs from the commit in `meta.json`.
-- **Line numbers land on the wrong lines.** The checkout isn't at the reviewed commit. Open the
-  review again and accept the checkout, or check out the commit in `meta.json`'s `head`.
+  Buffers and HCL. A line is also left alone when its text differs from the commit the page was
+  built from.
+- **Line numbers land on the wrong lines.** The checkout isn't at the reviewed commit. Click
+  **Check Out PR** in the Chapters view's title bar.
 
 ## Develop
 
@@ -189,8 +203,11 @@ npm run release        # package and install in one step
 runs the page-side scripts in headless Chrome or Chromium against a made-up review in
 `test/fixture`: a small Go module and a pull request that adds discount codes to its cart. A stand-in
 for VS Code records the messages the scripts send, and the test checks them. Set `CHROME` to pick
-the browser, and `SHOTS=1` to write screenshots to `test-out/`. The extension host side (language
-features, checkout, GitHub calls) has no automated test; try it in VS Code.
+the browser, and `SHOTS=1` to write screenshots to `test-out/`. `test/checkout-test.mjs` runs the
+checkout logic (`src/checkout.ts`) against local git repositories and a stand-in `gh` that prints
+the real `gh`'s errors, and `test/carry_test.py` checks how prep moves line references to a new
+head. The rest of the extension host side (language features, GitHub calls, the notifications) has
+no automated test; try it in VS Code.
 
 `npm run fixture` rebuilds `test/fixture/review/page.html` with the skill in
 `plugin/skills/story-review`, or the folder in `STORY_REVIEW_SKILL`. Rebuild it after changing the
@@ -205,6 +222,8 @@ artifact.
 
 - `src/extension.ts`: the Open Review command, the checkout, the review panel, language features
   for the page, and the GitHub Viewed sync.
+- `src/checkout.ts`: where the checkout stands against the reviewed head, and `gh pr checkout` with
+  its fallbacks. It doesn't import `vscode`.
 - `src/tokens.ts`: code colours. It wraps Shiki (VS Code's TextMate grammars and themes), maps a VS
   Code theme name to a bundled theme (VS Code's own themes are in `src/themes`, copied from
   `extensions/theme-defaults` in the VS Code repository under its MIT license), and maps semantic tokens to colours with VS Code's own
@@ -238,6 +257,9 @@ these working or update `media/bridge.js`:
   with `data-ws` for walkthrough steps.
 - `localStorage` keys the page's script writes. The extension stores them per review.
 - A `<script data-key>` page script, and `<style>` as the first style block (the Notes view reuses it).
+- `<!-- story-review base=<sha> head=<sha> -->` in the first 4 KB of `page.html`: the commits the page
+  was built from. Without it the extension falls back to `meta.json`, which prep moves to a new head
+  before the page is rebuilt.
 
 ## License
 

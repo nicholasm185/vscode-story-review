@@ -2,13 +2,11 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { randomBytes } from "crypto";
-import { Hub, Outline, PanelLink } from "./views";
+import { CheckoutStatus, Hub, Outline, PanelLink } from "./views";
+import { CheckoutAsk, Place, checkoutPr, errText, gh, git, hasTrackedChanges, placeNote, placeOf } from "./checkout";
 import { Run, Theme, Tokenizer, langOf, overlay, semanticColor, semanticOn, themeIdFor } from "./tokens";
 
-const run = promisify(execFile);
 const PENDING = "storyReview.pending";
 const LAST = "storyReview.lastOpened";
 const tokenizer = new Tokenizer();
@@ -76,37 +74,6 @@ function safeReaddir(dir: string): string[] {
   }
 }
 
-async function git(cwd: string, ...args: string[]): Promise<string> {
-  const { stdout } = await run("git", ["-C", cwd, ...args], { maxBuffer: 64 << 20 });
-  return stdout;
-}
-
-async function gitOk(cwd: string, ...args: string[]): Promise<boolean> {
-  try {
-    await run("git", ["-C", cwd, ...args]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function gh(cwd: string, ...args: string[]): Promise<string> {
-  try {
-    const { stdout } = await run("gh", args, { cwd, maxBuffer: 64 << 20 });
-    return stdout;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`GitHub CLI (gh) isn't on the PATH where this extension runs (${os.hostname()}). Install it there and run gh auth login.`);
-    }
-    throw e;
-  }
-}
-
-function errText(e: unknown): string {
-  const any = e as { stderr?: string; message?: string };
-  return (any.stderr || any.message || String(e)).trim().split("\n").slice(-2).join(" ");
-}
-
 async function findCheckout(repo: string): Promise<string | undefined> {
   for (const f of vscode.workspace.workspaceFolders ?? []) {
     if (f.uri.scheme !== "file") continue;
@@ -117,8 +84,84 @@ async function findCheckout(repo: string): Promise<string | undefined> {
   return undefined;
 }
 
+const STAMP = /<!-- story-review base=([0-9a-f]{7,40}) head=([0-9a-f]{7,40}) -->/;
+
+interface Built {
+  base: string;
+  head: string;
+}
+
+function readMeta(dir: string): Meta | undefined {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, "meta.json"), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+// prep.py moves meta.json to the new head long before page.html is rebuilt, so the page's own stamp wins.
+function builtFrom(page: string, dir: string, fallback: Meta): Built {
+  const m = STAMP.exec(page.slice(0, 4096));
+  const meta = m ? undefined : readMeta(dir) ?? fallback;
+  return m ? { base: m[1], head: m[2] } : { base: meta!.base, head: meta!.head };
+}
+
+function builtOf(review: Review): Built {
+  let page = "";
+  try {
+    page = fs.readFileSync(path.join(review.dir, "page.html"), "utf8");
+  } catch {
+    // The listing only offers reviews that have a page; a page deleted since falls back to meta.json.
+  }
+  return builtFrom(page, review.dir, review.meta);
+}
+
+function prBranch(dir: string): string | undefined {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, "pr.json"), "utf8")).headRefName;
+  } catch {
+    return undefined;
+  }
+}
+
+const resetAsk: CheckoutAsk = {
+  async resetBranch(branch) {
+    const pick = await vscode.window.showWarningMessage(
+      `${branch} has diverged from the PR, which was rebased or force-pushed. Reset ${branch} to the PR's head?`,
+      { modal: true, detail: "Runs gh pr checkout --force. Commits on the local branch that aren't in the PR are lost." },
+      "Reset Branch",
+    );
+    return pick === "Reset Branch";
+  },
+};
+
+/** Checks the PR out in wt and settles on the reviewed head; undefined when it didn't run. */
+async function checkOut(wt: string, review: Review, head: string): Promise<Place | undefined> {
+  const { pr } = review.meta;
+  if (await hasTrackedChanges(wt)) {
+    void vscode.window.showErrorMessage(`${path.basename(wt)} has uncommitted changes. Commit or stash them, then check out #${pr} again.`);
+    return undefined;
+  }
+  const place = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Checking out #${pr}` },
+    () => checkoutPr(wt, pr, prBranch(review.dir), head, resetAsk),
+  );
+  if (!place || place.kind === "at") return place;
+  const pick = await vscode.window.showWarningMessage(
+    place.kind === "ahead"
+      ? `PR #${pr} has ${place.commits} commit(s) after the reviewed head ${head.slice(0, 9)}, so some lines on the page may not match the files. A re-review would cover them.`
+      : `PR #${pr}'s head ${place.now.slice(0, 9)} isn't the reviewed head ${head.slice(0, 9)}. The branch was rewritten since the review.`,
+    "Check Out the Reviewed Commit",
+    "Keep the Branch",
+  );
+  if (pick !== "Check Out the Reviewed Commit") return place;
+  await git(wt, "checkout", "-q", "--detach", head);
+  return placeOf(wt, head);
+}
+
 async function ensureCheckout(ctx: vscode.ExtensionContext, review: Review): Promise<string | undefined> {
-  const { pr, head, repo } = review.meta;
+  const { pr, repo } = review.meta;
+  const { head } = builtOf(review);
   const wt = await findCheckout(repo);
   if (!wt) {
     const choice = await vscode.window.showWarningMessage(
@@ -134,9 +177,9 @@ async function ensureCheckout(ctx: vscode.ExtensionContext, review: Review): Pro
     return undefined;
   }
   if ((await git(wt, "rev-parse", "HEAD")).trim() === head) return wt;
-  if ((await git(wt, "status", "--porcelain", "--untracked-files=no")).trim()) {
-    void vscode.window.showErrorMessage(`${path.basename(wt)} has uncommitted changes. Commit or stash them, then open the review again.`);
-    return undefined;
+  if (await hasTrackedChanges(wt)) {
+    void vscode.window.showWarningMessage(`${path.basename(wt)} has uncommitted changes, so #${pr} opens without checking out. Check Out PR in the Chapters bar does it later.`);
+    return wt;
   }
   const branch = (await git(wt, "branch", "--show-current")).trim() || "a detached HEAD";
   const choice = await vscode.window.showInformationMessage(
@@ -147,27 +190,7 @@ async function ensureCheckout(ctx: vscode.ExtensionContext, review: Review): Pro
   );
   if (choice === "Open Without Checking Out") return wt;
   if (choice !== "Check Out") return undefined;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Checking out #${pr}` }, async () => {
-    try {
-      await gh(wt, "pr", "checkout", String(pr));
-    } catch (e) {
-      // The PR's branch can only be checked out in one worktree at a time.
-      if (!/already (checked out|used by worktree)/.test(errText(e))) throw new Error(errText(e));
-      await gh(wt, "pr", "checkout", String(pr), "--branch", `review/pr-${pr}`);
-    }
-  });
-  const now = (await git(wt, "rev-parse", "HEAD")).trim();
-  if (now !== head) {
-    const newer = await gitOk(wt, "merge-base", "--is-ancestor", head, now);
-    const pick = await vscode.window.showWarningMessage(
-      newer
-        ? `PR #${pr} has commits after the reviewed head ${head.slice(0, 9)}, so some lines on the page may not match the files.`
-        : `PR #${pr}'s head ${now.slice(0, 9)} isn't the reviewed head ${head.slice(0, 9)}. The branch was rewritten since the review.`,
-      "Check Out the Reviewed Commit",
-      "Keep the Branch",
-    );
-    if (pick === "Check Out the Reviewed Commit") await git(wt, "checkout", "-q", "--detach", head);
-  }
+  await checkOut(wt, review, head);
   return wt;
 }
 
@@ -216,7 +239,7 @@ async function codeBlock(lang: string, code: string, theme: Theme | undefined): 
 }
 
 const VIEWED_QUERY = `query($owner: String!, $name: String!, $n: Int!, $after: String) {
-  repository(owner: $owner, name: $name) { pullRequest(number: $n) { id
+  repository(owner: $owner, name: $name) { pullRequest(number: $n) { id headRefOid
     files(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { path viewerViewedState } } } } }`;
 
 class ReviewPanel implements PanelLink {
@@ -235,6 +258,11 @@ class ReviewPanel implements PanelLink {
   private paintSeq = 0;
   private theme?: Theme;
   private readonly blobs = new Map<string, Promise<string | undefined>>();
+  private built!: Built;
+  private note?: string;
+  private ahead = false;
+  private now?: string;
+  private remoteHead?: string;
 
   static show(ctx: vscode.ExtensionContext, hub: Hub, review: Review, wt: string): void {
     const open = ReviewPanel.panels.get(review.dir);
@@ -242,6 +270,7 @@ class ReviewPanel implements PanelLink {
       if (open.wt !== wt) open.post({ type: "hoverReset" });
       open.wt = wt;
       open.panel.reveal();
+      void open.checkPlace();
       return;
     }
     ReviewPanel.panels.set(review.dir, new ReviewPanel(ctx, hub, review, wt));
@@ -271,6 +300,7 @@ class ReviewPanel implements PanelLink {
     this.panel.onDidChangeViewState((e) => {
       if (!e.webviewPanel.active) return;
       hub.setPanel(this);
+      void this.checkPlace();
       if (Date.now() - this.lastPull > 15000) void this.pullViewed();
     });
     const config = vscode.workspace.onDidChangeConfiguration((e) => {
@@ -280,7 +310,8 @@ class ReviewPanel implements PanelLink {
     const edits = vscode.workspace.onDidChangeTextDocument((e) => {
       if (e.contentChanges.length && e.document.uri.fsPath.startsWith(this.wt + path.sep)) this.post({ type: "hoverReset" });
     });
-    this.panel.onDidDispose(() => { config.dispose(); edits.dispose(); });
+    const heads = onHeadChange(this.wt, () => void this.checkPlace());
+    this.panel.onDidDispose(() => { config.dispose(); edits.dispose(); void heads.then((d) => d?.dispose()); });
     this.watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(review.dir), "page.html"));
     this.watcher.onDidChange(() => this.render());
     this.watcher.onDidCreate(() => this.render());
@@ -304,6 +335,55 @@ class ReviewPanel implements PanelLink {
     return this.github;
   }
 
+  checkoutStatus(): CheckoutStatus {
+    const moved = this.remoteHead && this.remoteHead !== this.built.head
+      ? `PR #${this.review.meta.pr} has moved on to ${this.remoteHead.slice(0, 7)} on GitHub since this review.`
+      : undefined;
+    return { message: [this.note, moved].filter(Boolean).join(" ") || undefined, stale: !!this.note && !this.ahead };
+  }
+
+  async checkOut(): Promise<void> {
+    try {
+      const place = await checkOut(this.wt, this.review, this.built.head);
+      if (place) await rememberOpened(this.ctx, this.wt, this.review);
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      await this.checkPlace();
+    }
+  }
+
+  /** Updates the side bar's checkout note; with announce, offers the checkout when a rebuild moved the reviewed head. */
+  async checkPlace(announce = false): Promise<void> {
+    const head = this.built.head;
+    let place: Place;
+    try {
+      place = await placeOf(this.wt, head);
+    } catch (e) {
+      log(`Couldn't compare the checkout with the reviewed head ${head.slice(0, 9)}: ${errText(e)}`);
+      return;
+    }
+    if (head !== this.built.head) return;
+    if (this.now && this.now !== place.now) {
+      // The files under the page changed, so cached hovers are stale and semantic colours may now apply.
+      this.post({ type: "hoverReset" });
+      if (place.kind === "at") this.post({ type: "repaint" });
+    }
+    this.now = place.now;
+    this.ahead = place.kind === "ahead";
+    const note = placeNote(place, head);
+    if (note !== this.note) {
+      this.note = note;
+      this.hub.setCheckout(this, this.checkoutStatus());
+    }
+    if (!announce || !note || this.ahead) return;
+    const pick = await vscode.window.showInformationMessage(
+      `Review #${this.review.meta.pr} was rebuilt for ${head.slice(0, 9)}. ${note}`,
+      "Check Out",
+    );
+    if (pick === "Check Out") await this.checkOut();
+  }
+
   // GitHub's Viewed state is the record, except for files the reader ticked since the read began: those win.
   private async pullViewed(): Promise<void> {
     if (this.pulling) return;
@@ -319,6 +399,7 @@ class ReviewPanel implements PanelLink {
         if (after) args.push("-f", `after=${after}`);
         const pr = JSON.parse(await gh(this.wt, ...args)).data.repository.pullRequest;
         this.prId = pr.id;
+        this.remoteHead = pr.headRefOid;
         for (const f of pr.files.nodes) state.set(f.path, f.viewerViewedState);
         after = pr.files.pageInfo.hasNextPage ? pr.files.pageInfo.endCursor : undefined;
       } while (after);
@@ -340,6 +421,7 @@ class ReviewPanel implements PanelLink {
     for (const [file, t] of this.ticks) if (fresh(t) && page.has(file)) page.set(file, t.on ? "VIEWED" : "UNVIEWED");
     this.github = state;
     this.hub.setRemote(this, page);
+    this.hub.setCheckout(this, this.checkoutStatus());
     this.post({ type: "syncViewed", listed: [...page.keys()], viewed: [...page].filter(([, v]) => v === "VIEWED").map(([p]) => p) });
     for (const [file, t] of this.ticks) if (fresh(t)) this.queue.set(file, t.on);
     await this.flush();
@@ -379,6 +461,10 @@ class ReviewPanel implements PanelLink {
 
   private render(): void {
     const page = fs.readFileSync(path.join(this.review.dir, "page.html"), "utf8");
+    const built = builtFrom(page, this.review.dir, this.review.meta);
+    const moved = !!this.built && built.head !== this.built.head;
+    this.built = built;
+    void this.checkPlace(moved);
     this.css = /<style>([\s\S]*?)<\/style>/.exec(page)?.[1] ?? "";
     const webview = this.panel.webview;
     const nonce = randomBytes(16).toString("base64");
@@ -536,7 +622,7 @@ class ReviewPanel implements PanelLink {
       theme = await tokenizer.theme(pick.id);
     }
     this.theme = theme;
-    const { base, head } = this.review.meta;
+    const { base, head } = this.built;
     const tm = new Map<string, { src: string[]; runs: Run[][] }>();
     for (const [file, want] of Object.entries(m.files)) {
       const lang = langOf(file);
@@ -642,6 +728,42 @@ class ReviewPanel implements PanelLink {
 
 let hub: Hub;
 
+interface GitRepo {
+  rootUri: vscode.Uri;
+  state: { HEAD?: { commit?: string }; onDidChange: vscode.Event<void> };
+}
+interface GitApi {
+  repositories: GitRepo[];
+  onDidOpenRepository: vscode.Event<GitRepo>;
+}
+
+// The built-in Git extension sees checkouts made in a terminal too; without it, focus and panel switches still re-check.
+async function onHeadChange(wt: string, fire: () => void): Promise<vscode.Disposable | undefined> {
+  try {
+    const ext = vscode.extensions.getExtension<{ getAPI(v: 1): GitApi }>("vscode.git");
+    if (!ext) return undefined;
+    const api = (ext.isActive ? ext.exports : await ext.activate()).getAPI(1);
+    const subs: vscode.Disposable[] = [];
+    const hook = (repo: GitRepo) => {
+      const root = repo.rootUri.fsPath;
+      if (wt !== root && !wt.startsWith(root + path.sep)) return;
+      let last = repo.state.HEAD?.commit;
+      subs.push(repo.state.onDidChange(() => {
+        const now = repo.state.HEAD?.commit;
+        if (now === last) return;
+        last = now;
+        fire();
+      }));
+    };
+    api.repositories.forEach(hook);
+    subs.push(api.onDidOpenRepository(hook));
+    return new vscode.Disposable(() => subs.forEach((d) => d.dispose()));
+  } catch (e) {
+    log(`The Git extension isn't available, so checkout changes show on focus only: ${errText(e)}`);
+    return undefined;
+  }
+}
+
 async function openReview(ctx: vscode.ExtensionContext, review: Review): Promise<void> {
   const wt = await ensureCheckout(ctx, review);
   if (!wt) return;
@@ -650,14 +772,14 @@ async function openReview(ctx: vscode.ExtensionContext, review: Review): Promise
 }
 
 // A worktree and the branch checked out in it, or the commit when detached.
-async function placeOf(wt: string): Promise<{ key: string; label: string }> {
+async function branchKey(wt: string): Promise<{ key: string; label: string }> {
   const branch = (await git(wt, "branch", "--show-current")).trim();
   const at = branch || "@" + (await git(wt, "rev-parse", "HEAD")).trim();
   return { key: `${wt}\n${at}`, label: branch || `detached ${at.slice(1, 10)}` };
 }
 
 async function rememberOpened(ctx: vscode.ExtensionContext, wt: string, review: Review): Promise<void> {
-  const { key } = await placeOf(wt);
+  const { key } = await branchKey(wt);
   const all = { ...ctx.globalState.get<Record<string, string>>(LAST, {}) };
   delete all[key];
   all[key] = review.dir;
@@ -670,7 +792,7 @@ async function lastHere(ctx: vscode.ExtensionContext): Promise<{ review: Review;
   const all = ctx.globalState.get<Record<string, string>>(LAST, {});
   for (const f of vscode.workspace.workspaceFolders ?? []) {
     if (f.uri.scheme !== "file") continue;
-    const place = await placeOf(f.uri.fsPath).catch(() => undefined);
+    const place = await branchKey(f.uri.fsPath).catch(() => undefined);
     const dir = place && all[place.key];
     const review = dir ? listReviews().find((r) => r.dir === dir) : undefined;
     if (review) return { review, branch: place!.label };
@@ -711,13 +833,16 @@ export function activate(ctx: vscode.ExtensionContext): void {
       const r = await pickReview(ctx);
       if (r) await openReview(ctx, r);
     }),
+    vscode.commands.registerCommand("storyReview.checkout", () => hub.panel?.checkOut()),
     vscode.commands.registerCommand("storyReview.reopen", async () => {
       const r = (await lastHere(ctx))?.review ?? (await pickReview(ctx));
       if (r) await openReview(ctx, r);
     }),
     // Switching branches changes which review is the last one here; a check on focus is cheap and catches it.
     vscode.window.onDidChangeWindowState((s) => {
-      if (s.focused && !hub.panel) void refreshLast(ctx);
+      if (!s.focused) return;
+      if (!hub.panel) void refreshLast(ctx);
+      for (const p of ReviewPanel.panels.values()) void p.checkPlace();
     }),
   );
   void refreshLast(ctx);
